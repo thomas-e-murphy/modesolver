@@ -146,8 +146,8 @@ def efields(
     if not (epsxx.shape == epsxy.shape == epsyx.shape == epsyy.shape == epszz.shape):
         raise ValueError("All eps* components must have the same shape")
     
-    dx = np.broadcast_to(dx, epsxx.shape)
-    dy = np.broadcast_to(dy, epsxx.shape)
+    dx = np.broadcast_to(np.array(dx).reshape(1, -1), epsxx.shape)   # (ny, nx)
+    dy = np.broadcast_to(np.array(dy).reshape(-1, 1), epsxx.shape)   # (ny, nx)
 
     k = 2*np.pi/wavelength
     beta = 2*np.pi*neff/wavelength
@@ -169,16 +169,18 @@ def efields(
 
     Hx        = (hx1+hx2+hx3+hx4)/4
     dHx_dy    = (hx1+hx4-hx2-hx3)/(2*dy)
+    # d2Hx_dxdy = (hx4+hx2-hx1-hx3)/(dx*dy)
 
     Hy        = (hy1+hy2+hy3+hy4)/4
     dHy_dx    = (hy3+hy4-hy1-hy2)/(2*dx)
+    # d2Hy_dxdy = (hy4+hy2-hy1-hy3)/(dx*dy)
 
     dHzj_dx   = (hzj3+hzj4-hzj1-hzj2)/(2*dx)
     dHzj_dy   = (hzj1+hzj4-hzj2-hzj3)/(2*dy)
 
     # From jωD = ∇ x H, we find
     # Dx   = -(1/k) ∂(Hz∙j)/∂y + (β/k) Hy
-    # Dy   =  (1/k) ∂(Hz∙j)/∂x - (β/k) Hy
+    # Dy   =  (1/k) ∂(Hz∙j)/∂x - (β/k) Hx
     # Dz∙j =  (1/k) (∂Hy/∂x - ∂Hx/∂y)
 
     Dx = -dHzj_dy/k + (beta/k)*Hy

@@ -343,14 +343,279 @@ def wgmodes(
         )/(n + s)
     )
 
-    # Standard 3-point central difference formulas needed to find 
-    # (∂Hx/dx + ∂Hy/dx) at P, needed to post-calculate Hz from (Hx, Hy)
-    bxe = +w/(e*(e+w))
-    bxw = -e/(w*(e+w))
-    bxp = (e-w)/(e*w)
-    byn = +s/(n*(n+s))
-    bys = -n/(s*(n+s))
-    byp = (n-s)/(n*s)
+    bh12 =  e*w / ((2*e + 2*w) * ( ezz1*ezz2*s/(2*eyy2) + ezz1*ezz2*n/(2*eyy1)))
+    bh34 = -e*w / ((2*e + 2*w) * (-ezz3*ezz4*n/(2*eyy4) - ezz3*ezz4*s/(2*eyy3)))
+    bv14 = -n*s / ((2*n + 2*s) * (-e*ezz1*ezz4/(2*exx4) - ezz1*ezz4*w/(2*exx1)))
+    bv23 =  n*s / ((2*n + 2*s) * (-e*ezz2*ezz3/(2*exx3) - ezz2*ezz3*w/(2*exx2)))
+
+    bxn = (
+        bh12 * (-eyx1 * ezz2 / (2 * eyy1 * w) - ezz2 / n)
+        + bh34 * (ezz3 / n - eyx4 * ezz3 / (2 * e * eyy4))
+        + bv14
+        * (
+            e * exy4 * ezz1 * s / (exx4 * n**3 + exx4 * n**2 * s)
+            - e * exy4 * ezz1 / (exx4 * n**2)
+            + exy1 * ezz4 * s * w / (exx1 * n**3 + exx1 * n**2 * s)
+            - ezz1 * s / (n**2 + n * s)
+            + ezz1 / (2 * n)
+            + ezz4 * s / (n**2 + n * s)
+            - ezz4 / (2 * n)
+            - ezz1 * ezz4 / (2 * exx4 * n)
+            - exy1 * ezz4 * w / (exx1 * n**2)
+            + ezz1 * ezz4 / (2 * exx1 * n)
+        )
+        + bv23
+        * (
+            -e * exy3 * ezz2 / (exx3 * n**2 + exx3 * n * s)
+            - exy2 * ezz3 * w / (exx2 * n**2 + exx2 * n * s)
+            - ezz2 * s / (n**2 + n * s)
+            + ezz3 * s / (n**2 + n * s)
+        )
+    )
+    bxs = (
+        bh12 * (eyx2 * ezz1 / (2 * eyy2 * w) - ezz1 / s)
+        + bh34 * (ezz4 / s + eyx3 * ezz4 / (2 * e * eyy3))
+        + bv14
+        * (
+            -e * exy4 * ezz1 / (exx4 * n * s + exx4 * s**2)
+            - exy1 * ezz4 * w / (exx1 * n * s + exx1 * s**2)
+            + ezz1 * n / (n * s + s**2)
+            - ezz4 * n / (n * s + s**2)
+        )
+        + bv23
+        * (
+            e * exy3 * ezz2 * n / (exx3 * n * s**2 + exx3 * s**3)
+            - e * exy3 * ezz2 / (exx3 * s**2)
+            + exy2 * ezz3 * n * w / (exx2 * n * s**2 + exx2 * s**3)
+            + ezz2 * n / (n * s + s**2)
+            - ezz2 / (2 * s)
+            - ezz3 * n / (n * s + s**2)
+            + ezz3 / (2 * s)
+            + ezz2 * ezz3 / (2 * exx3 * s)
+            - exy2 * ezz3 * w / (exx2 * s**2)
+            - ezz2 * ezz3 / (2 * exx2 * s)
+        )
+    )
+    bxe = (
+        bh34
+        * (
+            eyx3 * ezz4 / (2 * e * eyy3)
+            - eyx4 * ezz3 / (2 * e * eyy4)
+            + ezz3 * ezz4 * n / (e**2 * eyy4)
+            + ezz3 * ezz4 * s / (e**2 * eyy3)
+        )
+        + bv14 * (ezz1 / (2 * n) - ezz1 * ezz4 / (2 * exx4 * n))
+        + bv23 * (-ezz2 / (2 * s) + ezz2 * ezz3 / (2 * exx3 * s))
+    )
+    bxw = (
+        bh12
+        * (
+            -eyx1 * ezz2 / (2 * eyy1 * w)
+            + eyx2 * ezz1 / (2 * eyy2 * w)
+            - ezz1 * ezz2 * s / (eyy2 * w**2)
+            - ezz1 * ezz2 * n / (eyy1 * w**2)
+        )
+        + bv14 * (-ezz4 / (2 * n) + ezz1 * ezz4 / (2 * exx1 * n))
+        + bv23 * (ezz3 / (2 * s) - ezz2 * ezz3 / (2 * exx2 * s))
+    )
+
+    bxne = bh34 * eyx4 * ezz3 / (2 * e * eyy4) + bv14 * (
+        -ezz1 / (2 * n) + ezz1 * ezz4 / (2 * exx4 * n)
+    )
+    bxse = -bh34 * eyx3 * ezz4 / (2 * e * eyy3) + bv23 * (
+        ezz2 / (2 * s) - ezz2 * ezz3 / (2 * exx3 * s)
+    )
+    bxnw = bh12 * eyx1 * ezz2 / (2 * eyy1 * w) + bv14 * (
+        ezz4 / (2 * n) - ezz1 * ezz4 / (2 * exx1 * n)
+    )
+    bxsw = -bh12 * eyx2 * ezz1 / (2 * eyy2 * w) + bv23 * (
+        -ezz3 / (2 * s) + ezz2 * ezz3 / (2 * exx2 * s)
+    )
+
+    bxp = (
+        bh12
+        * (
+            eyx1 * ezz2 / (2 * eyy1 * w)
+            - eyx2 * ezz1 / (2 * eyy2 * w)
+            + ezz1 / s
+            + ezz2 / n
+            + ezz1 * ezz2 * s / (eyy2 * w**2)
+            + ezz1 * ezz2 * n / (eyy1 * w**2)
+        )
+        + bh34
+        * (
+            -ezz3 / n
+            - ezz4 / s
+            - eyx3 * ezz4 / (2 * e * eyy3)
+            + eyx4 * ezz3 / (2 * e * eyy4)
+            - ezz3 * ezz4 * n / (e**2 * eyy4)
+            - ezz3 * ezz4 * s / (e**2 * eyy3)
+        )
+        + bv14
+        * (
+            e * exy4 * ezz1 / (exx4 * n * s)
+            - ezz1 / s
+            + ezz1 / (2 * n)
+            + ezz4 / s
+            - ezz4 / (2 * n)
+            + ezz1 * ezz4 / (2 * exx4 * n)
+            + exy1 * ezz4 * w / (exx1 * n * s)
+            - ezz1 * ezz4 / (2 * exx1 * n)
+        )
+        + bv23
+        * (
+            e * exy3 * ezz2 / (exx3 * n * s)
+            - ezz2 / (2 * s)
+            + ezz2 / n
+            + ezz3 / (2 * s)
+            - ezz3 / n
+            - ezz2 * ezz3 / (2 * exx3 * s)
+            + exy2 * ezz3 * w / (exx2 * n * s)
+            + ezz2 * ezz3 / (2 * exx2 * s)
+        )
+    )
+    bxp += k**2 * (
+        bh12 * (-ezz1 * ezz2 * n / 2 - ezz1 * ezz2 * s / 2)
+        + bh34 * (ezz3 * ezz4 * n / 2 + ezz3 * ezz4 * s / 2)
+        + bv14
+        * (-e * exy4 * ezz1 * ezz4 / (2 * exx4) - exy1 * ezz1 * ezz4 * w / (2 * exx1))
+        + bv23
+        * (-e * exy3 * ezz2 * ezz3 / (2 * exx3) - exy2 * ezz2 * ezz3 * w / (2 * exx2))
+    )
+
+    byn = (
+        bh12 * (ezz2 / (2 * w) - ezz1 * ezz2 / (2 * eyy1 * w))
+        + bh34 * (ezz3 / (2 * e) - ezz3 * ezz4 / (2 * e * eyy4))
+        + bv14
+        * (
+            e * ezz1 * ezz4 / (exx4 * n**2)
+            - exy4 * ezz1 / (2 * exx4 * n)
+            + exy1 * ezz4 / (2 * exx1 * n)
+            + ezz1 * ezz4 * w / (exx1 * n**2)
+        )
+    )
+    bys = (
+        bh12 * (-ezz1 / (2 * w) + ezz1 * ezz2 / (2 * eyy2 * w))
+        + bh34 * (-ezz4 / (2 * e) + ezz3 * ezz4 / (2 * e * eyy3))
+        + bv23
+        * (
+            e * ezz2 * ezz3 / (exx3 * s**2)
+            + exy3 * ezz2 / (2 * exx3 * s)
+            - exy2 * ezz3 / (2 * exx2 * s)
+            + ezz2 * ezz3 * w / (exx2 * s**2)
+        )
+    )
+    bye = (
+        bh12
+        * (
+            eyx1 * ezz2 * n / (e**2 * eyy1 + e * eyy1 * w)
+            + eyx2 * ezz1 * s / (e**2 * eyy2 + e * eyy2 * w)
+            - ezz1 * w / (e**2 + e * w)
+            + ezz2 * w / (e**2 + e * w)
+        )
+        + bh34
+        * (
+            eyx3 * ezz4 * s * w / (e**3 * eyy3 + e**2 * eyy3 * w)
+            + eyx4 * ezz3 * n * w / (e**3 * eyy4 + e**2 * eyy4 * w)
+            - ezz3 * w / (e**2 + e * w)
+            + ezz4 * w / (e**2 + e * w)
+            + ezz3 / (2 * e)
+            - ezz4 / (2 * e)
+            - ezz3 * ezz4 / (2 * e * eyy4)
+            + ezz3 * ezz4 / (2 * e * eyy3)
+            - eyx3 * ezz4 * s / (e**2 * eyy3)
+            - eyx4 * ezz3 * n / (e**2 * eyy4)
+        )
+        + bv14 * (-exy4 * ezz1 / (2 * exx4 * n) + ezz1 / e)
+        + bv23 * (exy3 * ezz2 / (2 * exx3 * s) + ezz2 / e)
+    )
+    byw = (
+        bh12
+        * (
+            -e * eyx1 * ezz2 * n / (e * eyy1 * w**2 + eyy1 * w**3)
+            - e * eyx2 * ezz1 * s / (e * eyy2 * w**2 + eyy2 * w**3)
+            + e * ezz1 / (e * w + w**2)
+            - e * ezz2 / (e * w + w**2)
+            + eyx1 * ezz2 * n / (eyy1 * w**2)
+            + eyx2 * ezz1 * s / (eyy2 * w**2)
+            - ezz1 / (2 * w)
+            + ezz2 / (2 * w)
+            + ezz1 * ezz2 / (2 * eyy2 * w)
+            - ezz1 * ezz2 / (2 * eyy1 * w)
+        )
+        + bh34
+        * (
+            e * ezz3 / (e * w + w**2)
+            - e * ezz4 / (e * w + w**2)
+            - eyx3 * ezz4 * s / (e * eyy3 * w + eyy3 * w**2)
+            - eyx4 * ezz3 * n / (e * eyy4 * w + eyy4 * w**2)
+        )
+        + bv14 * (ezz4 / w + exy1 * ezz4 / (2 * exx1 * n))
+        + bv23 * (ezz3 / w - exy2 * ezz3 / (2 * exx2 * s))
+    )
+
+    byne = bh34 * (-ezz3 / (2 * e) + ezz3 * ezz4 / (2 * e * eyy4)) + bv14 * exy4 * ezz1 / (
+        2 * exx4 * n
+    )
+    byse = bh34 * (ezz4 / (2 * e) - ezz3 * ezz4 / (2 * e * eyy3)) - bv23 * exy3 * ezz2 / (
+        2 * exx3 * s
+    )
+    bynw = bh12 * (-ezz2 / (2 * w) + ezz1 * ezz2 / (2 * eyy1 * w)) - bv14 * exy1 * ezz4 / (
+        2 * exx1 * n
+    )
+    bysw = bh12 * (ezz1 / (2 * w) - ezz1 * ezz2 / (2 * eyy2 * w)) + bv23 * exy2 * ezz3 / (
+        2 * exx2 * s
+    )
+
+    byp = (
+        bh12
+        * (
+            -ezz1 / (2 * w)
+            + ezz2 / (2 * w)
+            - ezz1 * ezz2 / (2 * eyy2 * w)
+            + ezz1 * ezz2 / (2 * eyy1 * w)
+            - eyx1 * ezz2 * n / (e * eyy1 * w)
+            - eyx2 * ezz1 * s / (e * eyy2 * w)
+            + ezz1 / e
+            - ezz2 / e
+        )
+        + bh34
+        * (
+            -ezz3 / w
+            + ezz4 / w
+            + eyx3 * ezz4 * s / (e * eyy3 * w)
+            + eyx4 * ezz3 * n / (e * eyy4 * w)
+            + ezz3 / (2 * e)
+            - ezz4 / (2 * e)
+            + ezz3 * ezz4 / (2 * e * eyy4)
+            - ezz3 * ezz4 / (2 * e * eyy3)
+        )
+        + bv14
+        * (
+            -e * ezz1 * ezz4 / (exx4 * n**2)
+            - ezz4 / w
+            + exy4 * ezz1 / (2 * exx4 * n)
+            - exy1 * ezz4 / (2 * exx1 * n)
+            - ezz1 * ezz4 * w / (exx1 * n**2)
+            - ezz1 / e
+        )
+        + bv23
+        * (
+            -e * ezz2 * ezz3 / (exx3 * s**2)
+            - ezz3 / w
+            - exy3 * ezz2 / (2 * exx3 * s)
+            + exy2 * ezz3 / (2 * exx2 * s)
+            - ezz2 * ezz3 * w / (exx2 * s**2)
+            - ezz2 / e
+        )
+    )
+    byp += k**2 * (
+        bh12 * (eyx1 * ezz1 * ezz2 * n / (2 * eyy1) + eyx2 * ezz1 * ezz2 * s / (2 * eyy2))
+        + bh34
+        * (-eyx3 * ezz3 * ezz4 * s / (2 * eyy3) - eyx4 * ezz3 * ezz4 * n / (2 * eyy4))
+        + bv14 * (e * ezz1 * ezz4 / 2 + ezz1 * ezz4 * w / 2)
+        + bv23 * (e * ezz2 * ezz3 / 2 + ezz2 * ezz3 * w / 2)
+    )
 
     jj = np.arange(nx*ny).reshape((ny, nx), order="C")
     
@@ -435,14 +700,10 @@ def wgmodes(
     Ayx = coo_matrix((ayx, (rows, cols)), shape=(N, N))
     Ayy = coo_matrix((ayy, (rows, cols)), shape=(N, N))
 
-    rows = np.concatenate([jall, jw, je])
-    cols = np.concatenate([jall, je, jw])
-    bx = np.concatenate([bxp[jall], bxe[jw], bxw[je]])
+    bx = np.concatenate([bxp[jall], bxe[jw], bxw[je], bxn[js], bxs[jn], bxsw[jne], bxnw[jse], bxne[jsw], bxse[jnw]])
+    by = np.concatenate([byp[jall], bye[jw], byw[je], byn[js], bys[jn], bysw[jne], bynw[jse], byne[jsw], byse[jnw]])
+    
     Bx = coo_matrix((bx, (rows, cols)), shape=(N, N))
-
-    rows = np.concatenate([jall, js, jn])
-    cols = np.concatenate([jall, jn, js])
-    by = np.concatenate([byp[jall], byn[js], bys[jn]])
     By = coo_matrix((by, (rows, cols)), shape=(N, N))
 
     A = bmat([[Axx, Axy],

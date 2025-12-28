@@ -111,9 +111,7 @@ def stretchmesh(x, y, nlayers, factor, method="PPPP"):
         raise ValueError("method must be length-4")
     method = method.upper()
 
-    # --------------------------------------------
     # Internal helper to apply a stretch
-    # --------------------------------------------
     def apply_stretch(arr, n, f, method_char):
         if n <= 0 or f == 1:
             return arr
@@ -159,22 +157,16 @@ def stretchmesh(x, y, nlayers, factor, method="PPPP"):
         arr[kv] = new_vals
         return arr
 
-    # --------------------------------------------
     # Y: north (0) and south (1)
-    # --------------------------------------------
     for idx, direction in [(0, "high"), (1, "low")]:
         y = apply_stretch(y, nlayers[idx], factor[idx], method[idx])
 
-    # --------------------------------------------
     # X: east (2) and west (3)
-    # --------------------------------------------
     for idx, direction in [(2, "high"), (3, "low")]:
         x = apply_stretch(x, nlayers[idx], factor[idx], method[idx])
 
-    # --------------------------------------------
     # Cell centers & increments
     # (they inherit real/complex type from x and y)
-    # --------------------------------------------
     xc = 0.5 * (x[:-1] + x[1:])
     yc = 0.5 * (y[:-1] + y[1:])
     dx = np.diff(x)
@@ -259,9 +251,7 @@ def padmesh(eps, x, y, nlayers):
     if min(nN, nS, nE, nW) < 0:
         raise ValueError("nlayers entries must be non-negative")
 
-    # --------------------------
     # Pad eps in y (south, north)
-    # --------------------------
     eps_padded = eps
 
     if nS > 0:
@@ -276,9 +266,7 @@ def padmesh(eps, x, y, nlayers):
         north_block = np.repeat(north_row, nN, axis=0)
         eps_padded = np.vstack([eps_padded, north_block])
 
-    # --------------------------
     # Pad eps in x (west, east)
-    # --------------------------
     if nW > 0:
         # West: prepend columns copied from the first column
         west_col = eps_padded[:, 0][:, np.newaxis]
@@ -291,9 +279,7 @@ def padmesh(eps, x, y, nlayers):
         east_block = np.repeat(east_col, nE, axis=1)
         eps_padded = np.hstack([eps_padded, east_block])
 
-    # --------------------------
     # Extend node coordinates
-    # --------------------------
     # y: nodes, south (-y) first
     if y.size < 2:
         raise ValueError("y must contain at least two nodes")
@@ -322,9 +308,7 @@ def padmesh(eps, x, y, nlayers):
         add_x_e = x[-1] + dx_east * np.arange(1, nE + 1)
         x = np.concatenate([x, add_x_e])
 
-    # --------------------------
     # Cell centers and sizes
-    # --------------------------
     xc = 0.5 * (x[:-1] + x[1:])
     yc = 0.5 * (y[:-1] + y[1:])
     nx = xc.size
@@ -338,3 +322,53 @@ def padmesh(eps, x, y, nlayers):
         )
 
     return x, y, xc, yc, nx, ny, eps_padded
+
+def trimmesh(x, y, nlayers, *arrays):
+    """
+    Trim a mesh and any number of associated arrays (eps, fields, etc.).
+
+    Trimming removes rows/columns from the mesh on each side:
+        nlayers = (north, south, east, west)
+
+    Arrays may be node-centered or cell-centered; the same slice applies
+    because both share compatible indexing boundaries.
+    """
+    import numpy as np
+
+    x = np.asarray(x)
+    y = np.asarray(y)
+
+    nN, nS, nE, nW = map(int, nlayers)
+
+    # New coordinates
+    x_new = x[nW : x.size - nE]
+    y_new = y[nS : y.size - nN]
+
+    # Cell centers
+    xc = (x_new[:-1] + x_new[1:]) / 2
+    yc = (y_new[:-1] + y_new[1:]) / 2
+
+    nx = xc.size
+    ny = yc.size
+
+    trimmed_arrays = []
+    for A in arrays:
+        A = np.asarray(A)
+
+        # allowed shapes:
+        expected_node = (y.size, x.size)
+        expected_cell = (y.size - 1, x.size - 1)
+
+        if A.shape not in (expected_node, expected_cell):
+            raise ValueError(
+                f"Array shape {A.shape} incompatible with mesh defined by x,y."
+            )
+
+        # apply the same slice for both node- and cell-centered arrays
+        trimmed = A[
+            nS : A.shape[0] - nN,
+            nW : A.shape[1] - nE,
+        ]
+        trimmed_arrays.append(trimmed)
+
+    return (x_new, y_new, xc, yc, nx, ny, *trimmed_arrays)

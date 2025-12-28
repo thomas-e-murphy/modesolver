@@ -49,8 +49,12 @@ def fibermesh(n, r, dx, dy):
       assigned to the innermost layer whose outer radius exceeds rho.
     """
     # Convert inputs to NumPy arrays
-    n = np.asarray(n, float)
+    n = np.asarray(n, dtype=complex)
     r = np.asarray(r, float)
+
+    nsquared = n**2
+    if np.allclose(nsquared.imag, 0.0):
+        nsquared = nsquared.real.astype(float)
 
     if n.shape != r.shape:
         raise ValueError("n and r must have the same shape")
@@ -77,10 +81,14 @@ def fibermesh(n, r, dx, dy):
     nlayers = n.size
 
     # Start with outermost layer everywhere
-    eps = np.full((ny, nx), n[-1]**2, dtype=float)
+    eps = np.full((ny, nx), n[-1]**2, dtype=complex)
 
     # Fill inner layers from outer-1 down to 0
     for jj in range(nlayers - 2, -1, -1):
-        eps[rho < r[jj]] = n[jj]**2
+        eps[rho < r[jj]] = nsquared[jj]
+
+    # Downcast to real, if all elements of eps are real
+    if np.iscomplexobj(eps) and np.allclose(eps.imag, 0.0, atol=1e-12):
+        eps = eps.real.astype(float)
 
     return x, y, xc, yc, nx, ny, eps

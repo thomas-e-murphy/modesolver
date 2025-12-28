@@ -79,9 +79,13 @@ def waveguidemesh(n, h, rh, rw, side, dx, dy, return_edges=False):
 
     """
 
-    n = np.asarray(n, float) # number of vertical layers
-    h = np.asarray(h, float) # thickness of each layer
+    n = np.asarray(n, dtype=complex) # index of vertical layers
+    h = np.asarray(h) # thickness of each layer
     nlayers = len(h)
+
+    nsquared = n**2
+    if np.allclose(nsquared.imag, 0.0):
+        nsquared = nsquared.real.astype(float)
 
     ih = np.rint(h / dy).astype(int)
     irh = int(round(rh / dy))
@@ -99,19 +103,23 @@ def waveguidemesh(n, h, rh, rw, side, dx, dy, return_edges=False):
     nx = xc.size
     ny = yc.size
 
-    eps = np.zeros((ny, nx))
+    eps = np.zeros((ny, nx), dtype=complex)
 
     iy = 0
     for jj in range(nlayers):
         for _ in range(ih[jj]):
-            eps[iy,:] = n[jj]**2
+            eps[iy,:] = nsquared[jj]
             iy += 1
 
     iy = ih.sum() - ih[-1] - 1
     for _ in range(irh):
-        eps[iy, irw:irw+iside] = n[-1]**2
+        eps[iy, irw:irw+iside] = nsquared[-1]
         iy -= 1
 
+    # Downcast to real, if all elements of eps are real
+    if np.iscomplexobj(eps) and np.allclose(eps.imag, 0.0, atol=1e-12):
+        eps = eps.real.astype(float)
+        
     if not return_edges:
         return x, y, xc, yc, nx, ny, eps
 

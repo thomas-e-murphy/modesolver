@@ -15,7 +15,8 @@ __version__ = "2.0.0"
 __author__ = "Thomas E. Murphy"
 
 from .wgmodes import wgmodes
-from .geometry import waveguidemesh, waveguidemeshfull, fibermesh, stretchmesh, padmesh
+from .svmodes import svmodes
+from .geometry import waveguidemesh, waveguidemeshfull, fibermesh, stretchmesh, padmesh, trimmesh
 from .postprocess import efields, poynting
 
-__all__ = ["wgmodes", "waveguidemesh", "stretchmesh", "waveguidemeshfull", "efields", "poynting"]
+__all__ = ["wgmodes", "svmodes", "waveguidemesh", "waveguidemeshfull", "fibermesh", "stretchmesh", "padmesh", "trimmesh", "efields", "poynting"]

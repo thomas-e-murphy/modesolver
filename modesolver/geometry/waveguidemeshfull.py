@@ -86,8 +86,12 @@ def waveguidemeshfull(n, h, rh, rw, side, dx, dy, return_edges=False):
     """
 
     # Convert inputs to arrays where appropriate
-    n = np.asarray(n, float)
-    h = np.asarray(h, float)
+    n = np.asarray(n, dtype=complex)
+    h = np.asarray(h)
+
+    nsquared = n**2
+    if np.allclose(nsquared.imag, 0.0):
+        nsquared = nsquared.real.astype(float)
 
     # Handle side as either scalar or two-sided specification
     side_arr = np.asarray(side, float)
@@ -124,29 +128,32 @@ def waveguidemeshfull(n, h, rh, rw, side, dx, dy, return_edges=False):
     ny = yc.size
 
     # Permittivity grid: eps[iy, ix] with iy along y (rows), ix along x (cols)
-    eps = np.zeros((ny, nx))
+    eps = np.zeros((ny, nx), dtype=complex)
 
     # Fill vertical layers from bottom to top
     iy = 0
     for jj in range(nlayers):
         for _ in range(ih[jj]):
-            eps[iy, :] = n[jj] ** 2
+            eps[iy, :] = nsquared[jj]
             iy += 1
 
     # Apply ridge/side modification over the etched portion of the appropriate layer
-    # (translated from the original MATLAB logic)
     if irh > 0:
         iy = ih.sum() - ih[-1] - 1  # starting row index (0-based)
         for _ in range(irh):
             # Left side region
             if iside1 > 0:
-                eps[iy, :iside1] = n[-1] ** 2
+                eps[iy, :iside1] = nsquared[-1]
 
             # Right side region
             if iside2 > 0:
-                eps[iy, irw + iside1: irw + iside1 + iside2] = n[-1] ** 2
+                eps[iy, irw + iside1: irw + iside1 + iside2] = nsquared[-1]
 
             iy -= 1
+
+    # Downcast to real, if all elements of eps are real
+    if np.iscomplexobj(eps) and np.allclose(eps.imag, 0.0, atol=1e-12):
+        eps = eps.real.astype(float)
 
     if not return_edges:
         return x, y, xc, yc, nx, ny, eps
