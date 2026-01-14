@@ -15,6 +15,7 @@ __version__ = "2.0.0"
 __author__ = "Thomas E. Murphy"
 
 from .wgmodes import wgmodes
+from .wgmodes_yee import wgmodes_yee
 from .svmodes import svmodes
 from .geometry import waveguidemesh, waveguidemeshfull, fibermesh, stretchmesh, padmesh, trimmesh
 from .postprocess import efields, poynting
