@@ -10,7 +10,7 @@ https://doi.org/10.1109/JLT.2008.923643
 
 New in the latest release
 
-In addition to the original node-centered formulation, the library now includes an alternative finite-difference eigenmode solver based on a Yee (staggered-grid) discretization. In this formulation, the electric and magnetic field components are defined on offset grids, analogous to the spatial staggering used in finite-difference time-domain (FDTD) methods. The Yee-grid implementation for comparison with time-domain simulations.
+In addition to the original node-centered formulation, the library now includes an alternative finite-difference eigenmode solver based on a Yee (staggered-grid) discretization. In this formulation, the electric and magnetic field components are defined on offset grids, analogous to the spatial staggering used in finite-difference time-domain (FDTD) methods.
 
 The library also includes examples, as well as a set of tools for defining refractive index profiles, and post-processing the modes.
 
