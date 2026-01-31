@@ -14,7 +14,6 @@ This package currently provides:
 __version__ = "2.0.0"
 __author__ = "Thomas E. Murphy"
 
-from .wgmodes_matrix import wgmodes_matrix
 from .wgmodes import wgmodes
 from .wgmodes_yee import wgmodes_yee
 from .svmodes import svmodes
