@@ -14,10 +14,11 @@ This package currently provides:
 __version__ = "2.0.0"
 __author__ = "Thomas E. Murphy"
 
+from .wgmodes_matrix import wgmodes_matrix
 from .wgmodes import wgmodes
 from .wgmodes_yee import wgmodes_yee
 from .svmodes import svmodes
 from .geometry import waveguidemesh, waveguidemeshfull, fibermesh, stretchmesh, padmesh, trimmesh
-from .postprocess import efields, poynting
+from .postprocess import efields, poynting, unfold
 
-__all__ = ["wgmodes", "svmodes", "waveguidemesh", "waveguidemeshfull", "fibermesh", "stretchmesh", "padmesh", "trimmesh", "efields", "poynting"]
+__all__ = ["wgmodes", "wgmodes_yee", "svmodes", "waveguidemesh", "waveguidemeshfull", "fibermesh", "stretchmesh", "padmesh", "trimmesh", "efields", "poynting", "unfold"]

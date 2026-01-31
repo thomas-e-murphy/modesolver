@@ -3,8 +3,10 @@ import warnings
 from scipy.sparse import coo_matrix
 from scipy.sparse.linalg import eigs
 
+from .sparse_solve import make_shift_invert_operator
 
-def svmodes(wavelength, guess, nmodes, dx, dy, eps, boundary, field):
+
+def svmodes(wavelength, guess, nmodes, dx, dy, eps, boundary, field, *, solver=None):
     """
     This function calculates the modes of a dielectric waveguide using the
     semivectorial finite difference method.
@@ -57,6 +59,12 @@ def svmodes(wavelength, guess, nmodes, dx, dy, eps, boundary, field):
                             'EX'     - semivectorial Ex formulation
                             'EY'     - semivectorial Ey formulation
                             'scalar' - scalar Helmholtz approximation
+
+        solver     :    Sparse linear solver for shift-invert eigenvalue problem.
+                        If None (default), automatically selects the best available:
+                            Real matrices:    PyPardiso > MUMPS > SuperLU
+                            Complex matrices: MUMPS > SuperLU
+                        May be explicitly set to 'pypardiso', 'mumps', or 'superlu'.
 
     OUTPUT:
 
@@ -226,7 +234,8 @@ def svmodes(wavelength, guess, nmodes, dx, dy, eps, boundary, field):
     # Solve the sparse eigenvalue problem A·phi = β²·phi
     shift = (2.0 * np.pi * guess / wavelength) ** 2  # = (k*guess)^2
 
-    vals, vecs = eigs(A, k=nmodes, sigma=shift, which="LM", tol=1e-8)
+    OPinv, _ = make_shift_invert_operator(A, shift, solver=solver)
+    vals, vecs = eigs(A, k=nmodes, sigma=shift, OPinv=OPinv, which="LM", tol=1e-8)
 
     if np.iscomplexobj(A.data):
         neff = np.zeros((nmodes,), dtype=complex)

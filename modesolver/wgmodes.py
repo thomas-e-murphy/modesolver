@@ -3,12 +3,15 @@ import warnings
 from scipy.sparse.linalg import eigs
 from scipy.sparse import coo_matrix, bmat
 
+from .sparse_solve import make_shift_invert_operator
+
 def wgmodes(
         wavelength, guess, nmodes, dx, dy, boundary,
         *,
         eps=None,
         epsxx=None, epsyy=None, epszz=None,
-        epsxy=None, epsyx=None      
+        epsxy=None, epsyx=None,
+        solver=None
 ):    
     """
     This function computes the two transverse magnetic field components of a 
@@ -59,6 +62,12 @@ def wgmodes(
         1) eps (isotropic case)
         2) epsxx, epsyy, epszz (anisotropic, diagonal)
         3) epsxx, epsxy, epsyx, epsyy, epszz (fully anisotropic)
+
+        solver  :   Sparse linear solver for shift-invert eigenvalue problem.
+                    If None (default), automatically selects the best available:
+                        Real matrices:    PyPardiso > MUMPS > SuperLU
+                        Complex matrices: MUMPS > SuperLU
+                    May be explicitly set to 'pypardiso', 'mumps', or 'superlu'.
 
     OUTPUT:
 
@@ -714,7 +723,8 @@ def wgmodes(
     B.eliminate_zeros()
 
     shift = (k*guess)**2
-    vals, vecs = eigs(A, k=nmodes, sigma=shift, which="LM")
+    OPinv, _ = make_shift_invert_operator(A, shift, solver=solver)
+    vals, vecs = eigs(A, k=nmodes, sigma=shift, OPinv=OPinv, which="LM")
 
     # allocate space for result
     if np.iscomplexobj(A):

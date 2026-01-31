@@ -1,14 +1,18 @@
 # modesolver
 
-A Python library for computing the electromagnetic eigenmodes of dielectric optical waveguides
-using the finite difference method.  This library uses the method described in: 
+A Python library for computing the electromagnetic eigenmodes of dielectric optical waveguides using the finite difference method.  This library uses the method described in: 
 
 A. B. Fallahkhair, K. S. Li and T. E. Murphy,
 "Vector Finite Difference Modesolver for Anisotropic Dielectric Waveguides",
 J. Lightwave Technol. 26(11), 1423-1431 (2008).
 https://doi.org/10.1109/JLT.2008.923643
 
-New in the latest release
+New in the latest release:
+
+Automatic selection of the best available solver for shift-invert eigenvalue problems
+  - PyPardiso support (fastest for real matrices, requires Intel MKL)
+  - MUMPS support (efficient for both real and complex matrices)
+  - Falls back to SciPy's SuperLU when optional packages are unavailable
 
 In addition to the original node-centered formulation, the library now includes an alternative finite-difference eigenmode solver based on a Yee (staggered-grid) discretization. In this formulation, the electric and magnetic field components are defined on offset grids, analogous to the spatial staggering used in finite-difference time-domain (FDTD) methods.
 

@@ -15,7 +15,13 @@ authors = [
 dependencies = [
     "numpy",
     "scipy",
-    "matplotlib"
+    "matplotlib",
+]
+
+[project.optional-dependencies]
+fast = [
+    "pypardiso",
+    "python-mumps>=0.0.6",
 ]
 
 [tool.setuptools]

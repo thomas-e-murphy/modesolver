@@ -3,11 +3,14 @@ import warnings
 from scipy.sparse.linalg import eigs
 from scipy.sparse import coo_matrix, bmat, diags, eye
 
+from .sparse_solve import make_shift_invert_operator
+
 def wgmodes_yee(
         wavelength, guess, nmodes, dx, dy, boundary,
         *,
         eps=None,
-        epsxx=None, epsyy=None, epszz=None
+        epsxx=None, epsyy=None, epszz=None,
+        solver=None
 ):    
     """
     This function computes the eigenmodes of a dielectric waveguide, using the 
@@ -57,6 +60,12 @@ def wgmodes_yee(
         Dielectric permittivity (specified with keyword arguments):
         1) eps (isotropic case), size (ny,nx)
         2) epsxx, epsyy, epszz (anisotropic, diagonal)
+
+        solver  :   Sparse linear solver for shift-invert eigenvalue problem.
+                    If None (default), automatically selects the best available:
+                        Real matrices:    PyPardiso > MUMPS > SuperLU
+                        Complex matrices: MUMPS > SuperLU
+                    May be explicitly set to 'pypardiso', 'mumps', or 'superlu'.
 
     OUTPUT:
 
@@ -393,7 +402,8 @@ def wgmodes_yee(
                By + (1.0/k0**2) * (By @ Ax - Bx @ Ay) @ epsz_inv @ Dx]], format="csr")
 
     shift = (k0*guess)**2
-    vals, vecs = eigs(U, k=nmodes, sigma=shift, which="LM")
+    OPinv, _ = make_shift_invert_operator(U, shift, solver=solver)
+    vals, vecs = eigs(U, k=nmodes, sigma=shift, OPinv=OPinv, which="LM")
 
     # allocate space for result
     if np.iscomplexobj(U):

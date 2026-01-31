@@ -44,6 +44,9 @@ MANIFEST
 *.swp
 *.swo
 
+# Claude Code
+.claude/
+
 # ------------------------------
 #  OS-specific files
 # ------------------------------
@@ -94,3 +97,9 @@ tests/output/  # Ignore numerical-diff or dump files
 .prof
 .profraw
 .cache/
+
+# Testing and coverage
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
