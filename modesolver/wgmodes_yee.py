@@ -10,7 +10,8 @@ def wgmodes_yee(
         *,
         eps=None,
         epsxx=None, epsyy=None, epszz=None,
-        solver=None
+        solver=None,
+        collocate=False
 ):    
     """
     This function computes the eigenmodes of a dielectric waveguide, using the 
@@ -67,6 +68,10 @@ def wgmodes_yee(
                         Complex matrices: MUMPS > SuperLU
                     May be explicitly set to 'pypardiso', 'mumps', or 'superlu'.
 
+        collocate : If True, linearly interpolate all field components to
+                    cell centers, returning six fields of identical shape (ny,nx).
+                    Default is False.
+
     OUTPUT:
 
         neff    :   effective indices of the modes (nmodes,)
@@ -76,6 +81,9 @@ def wgmodes_yee(
         ex      :   transverse electric field component (ny+1,nx,nmodes)
         ey      :   transverse electric field component (ny,nx+1,nmodes)
         ezj     :   j·Ez, longitudinal electric field component (ny+1,nx+1,nmodes)
+
+        If collocate=True, all field components are interpolated to cell centers
+        and have identical shape (ny,nx,nmodes).
 
     NOTES:
 
@@ -461,14 +469,22 @@ def wgmodes_yee(
         Ey[:, :, m]  = ey.reshape((ny, nx+1), order="C")
         Ezj[:, :, m] = ezj.reshape((ny+1, nx+1), order="C")
 
+    # Collocate all fields to cell centers via linear interpolation
+    if collocate:
+        Ezj = 0.25 * (Ezj[:-1, :-1, :] + Ezj[1:, :-1, :] + Ezj[:-1, 1:, :] + Ezj[1:, 1:, :])
+        Ex = 0.5 * (Ex[:-1, :, :] + Ex[1:, :, :])
+        Ey = 0.5 * (Ey[:, :-1, :] + Ey[:, 1:, :])
+        Hx = 0.5 * (Hx[:, :-1, :] + Hx[:, 1:, :])
+        Hy = 0.5 * (Hy[:-1, :, :] + Hy[1:, :, :])
+
     # if nmodes == 1, Collapse fields to 2D arrays, and return scalar neff
-    if nmodes == 1:  
+    if nmodes == 1:
         Ex = Ex[:, :, 0]
         Ey = Ey[:, :, 0]
         Ezj = Ezj[:, :, 0]
         Hx = Hx[:, :, 0]
         Hy = Hy[:, :, 0]
         Hzj = Hzj[:, :, 0]
-        neff = neff[0] 
+        neff = neff[0]
 
     return neff, Ex, Ey, Ezj, Hx, Hy, Hzj

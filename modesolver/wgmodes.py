@@ -11,7 +11,8 @@ def wgmodes(
         eps=None,
         epsxx=None, epsyy=None, epszz=None,
         epsxy=None, epsyx=None,
-        solver=None
+        solver=None,
+        collocate=False
 ):    
     """
     This function computes the two transverse magnetic field components of a 
@@ -25,14 +26,15 @@ def wgmodes(
 
     USAGE:
 
-        neff, hx, hy, hzj = wgmodes(wavelength, guess, nmodes, dx, dy, boundary, 
-                        eps=eps)
+        neff, ex, ey, ezj, hx, hy, hzj = wgmodes(wavelength, guess, nmodes,
+                        dx, dy, boundary, eps=eps)
 
-        neff, hx, hy, hzj = wgmodes(wavelength, guess, nmodes, dx, dy, boundary,
-                        epsxx=xx, epsyy=yy, epszz=zz)
+        neff, ex, ey, ezj, hx, hy, hzj = wgmodes(wavelength, guess, nmodes,
+                        dx, dy, boundary, epsxx=xx, epsyy=yy, epszz=zz)
 
-        neff, hx, hy, hzj = wgmodes(wavelength, guess, nmodes, dx, dy, boundary,
-                        epsxx=xx, epsxy=xy, epsyx=yx, epsyy=yy, epszz=zz)
+        neff, ex, ey, ezj, hx, hy, hzj = wgmodes(wavelength, guess, nmodes,
+                        dx, dy, boundary, epsxx=xx, epsxy=xy, epsyx=yx,
+                        epsyy=yy, epszz=zz)
 
     INPUT:
 
@@ -69,23 +71,33 @@ def wgmodes(
                         Complex matrices: MUMPS > SuperLU
                     May be explicitly set to 'pypardiso', 'mumps', or 'superlu'.
 
+        collocate : If True, linearly interpolate H-field components to cell
+                    centers, returning six fields of identical shape (ny,nx).
+                    Default is False.
+
     OUTPUT:
 
+        neff       :    effective indices of the modes (nmodes,)
+        ex         :    transverse electric field component (ny,nx,nmodes)
+        ey         :    transverse electric field component (ny,nx,nmodes)
+        ezj        :    j·Ez, longitudinal electric field component (ny,nx,nmodes)
         hx         :    transverse magnetic field component (ny+1,nx+1,nmodes)
         hy         :    transverse magnetic field component (ny+1,nx+1,nmodes)
         hzj        :    j·Hz, longitudinal magnetic field component (ny+1,nx+1,nmodes)
-        neff       :    effective indices of the modes (nmodes,)
+
+        If collocate=True, H-field components are interpolated to cell centers
+        and all six fields have identical shape (ny,nx,nmodes).
 
     NOTES:
 
     1)  The units are arbitrary, but they must be self-consistent
         (e.g., if lambda is in µm, then dx and dy should also be in µm).
 
-    2)  Unlike the E-field modesolvers, this method calculates the
-        transverse MAGNETIC field components Hx and Hy. Also, it calculates
-        the components at the edges (vertices) of each cell, rather than in
-        the center of each cell. As a result, if np.shape(eps) is (ny,nx), 
-        then the output fields will have a size of (ny+1,nx+1).
+    2)  This method calculates the transverse MAGNETIC field components Hx
+        and Hy at the vertices of each cell, and the ELECTRIC field components
+        Ex and Ey at the cell centers. As a result, if np.shape(eps) is (ny,nx),
+        then the H-fields will have size (ny+1,nx+1) and the E-fields will have
+        size (ny,nx). Use collocate=True to interpolate H-fields to cell centers.
 
     3)  This version of the modesolver can optionally support non-uniform
         grid sizes. To use this feature, you may let dx and/or dy be vectors
@@ -106,9 +118,9 @@ def wgmodes(
         complex coordinate stretching technique at the edges of the
         computation window. 
 
-    6)  The longitudinal magnetic field j·Hz is calculated and returned along
-        with Hx and Hy.  For passive waveguides, Hz is imaginary, and the product
-        j·Hz is real-valued.
+    6)  The longitudinal fields j·Hz and j·Ez are calculated and returned along
+        with Hx, Hy, Ex, and Ey.  For passive waveguides, Hz and Ez are imaginary,
+        and the products j·Hz and j·Ez are real-valued.
 
     AUTHORS (from original MATLAB code):
 
@@ -148,16 +160,26 @@ def wgmodes(
     if any(ch not in set("ASEM0") for ch in boundary):
         raise ValueError("boundary string may contain only A, S, E, M, or 0")
     
-    ny, nx = epsxx.shape
-    nx += 1
-    ny += 1
+    ny_cells, nx_cells = epsxx.shape  # cell-centered grid size (for E-fields)
+    ny, nx = ny_cells + 1, nx_cells + 1  # vertex grid size (for H-fields)
     N = nx*ny  # number of grid-points at which to compute Hx or Hy
+
+    # Save unpadded eps arrays for E-field calculation
+    epsxx_cell = epsxx.copy()
+    epsyy_cell = epsyy.copy()
+    epszz_cell = epszz.copy()
+    epsxy_cell = epsxy.copy()
+    epsyx_cell = epsyx.copy()
 
     epsxx = np.pad(epsxx, pad_width=1, mode='edge')
     epsyy = np.pad(epsyy, pad_width=1, mode='edge')
     epszz = np.pad(epszz, pad_width=1, mode='edge')
     epsxy = np.pad(epsxy, pad_width=1, mode='edge')
     epsyx = np.pad(epsyx, pad_width=1, mode='edge')
+
+    # Save original dx, dy for E-field calculation
+    dx_orig = dx
+    dy_orig = dy
 
     if np.isscalar(dx):   # uniform x grid
         dx = np.full(nx + 1, dx)
@@ -728,17 +750,23 @@ def wgmodes(
 
     # allocate space for result
     if np.iscomplexobj(A):
-        # A is complex -> Keep (neff, hx, hy) complex
+        # A is complex -> Keep fields complex
         neff = np.zeros((nmodes), dtype=complex)
-        hx = np.zeros((ny, nx, nmodes), dtype=complex)
-        hy = np.zeros((ny, nx, nmodes), dtype=complex)
-        hzj = np.zeros((ny, nx, nmodes), dtype=complex)
+        Hx = np.zeros((ny, nx, nmodes), dtype=complex)
+        Hy = np.zeros((ny, nx, nmodes), dtype=complex)
+        Hzj = np.zeros((ny, nx, nmodes), dtype=complex)
+        Ex = np.zeros((ny_cells, nx_cells, nmodes), dtype=complex)
+        Ey = np.zeros((ny_cells, nx_cells, nmodes), dtype=complex)
+        Ezj = np.zeros((ny_cells, nx_cells, nmodes), dtype=complex)
     else:
-        # A is real -> Downcast (neff, hx, hy) to real (discard imaginary)
+        # A is real -> Downcast to real (discard imaginary)
         neff = np.zeros((nmodes,), dtype=float)
-        hx = np.zeros((ny, nx, nmodes), dtype=float)
-        hy = np.zeros((ny, nx, nmodes), dtype=float)
-        hzj = np.zeros((ny, nx, nmodes), dtype=float)
+        Hx = np.zeros((ny, nx, nmodes), dtype=float)
+        Hy = np.zeros((ny, nx, nmodes), dtype=float)
+        Hzj = np.zeros((ny, nx, nmodes), dtype=float)
+        Ex = np.zeros((ny_cells, nx_cells, nmodes), dtype=float)
+        Ey = np.zeros((ny_cells, nx_cells, nmodes), dtype=float)
+        Ezj = np.zeros((ny_cells, nx_cells, nmodes), dtype=float)
         if not np.allclose(vals.imag, 0, 1e-12):
             warnings.warn("Unexpected complex eigenvalues, discarding imaginary parts", RuntimeWarning)
         vals = vals.real
@@ -753,6 +781,10 @@ def wgmodes(
     neff = neff[order]
     vecs = vecs[:, order]
 
+    # Prepare dx, dy for E-field calculation (broadcast to cell-centered shape)
+    dx_cell = np.broadcast_to(np.array(dx_orig).reshape(1, -1), (ny_cells, nx_cells))
+    dy_cell = np.broadcast_to(np.array(dy_orig).reshape(-1, 1), (ny_cells, nx_cells))
+
     for m in range(nmodes):
         beta = k*neff[m]
         v = vecs[:, m]
@@ -762,21 +794,71 @@ def wgmodes(
         hy_m = v[N:]
 
         # find index where |Hx|**2 + |Hy|**2 is largest
-        imax = np.argmax(np.abs(hx_m)**2 + np.abs(hy_m)**2) 
-        # pick larger of Hx or Hy at that point 
+        imax = np.argmax(np.abs(hx_m)**2 + np.abs(hy_m)**2)
+        # pick larger of Hx or Hy at that point
         norm = max([hx_m[imax], hy_m[imax]], key=abs)        # Normalization factor
 
-        # NOTE:  hx,hy will downcast to real (discard imaginary components) if A was real
-        hx[:, :, m] = (hx_m / norm).reshape((ny, nx), order="C")
-        hy[:, :, m] = (hy_m / norm).reshape((ny, nx), order="C")
-        hzj[:, :, m] = (hzj_m / norm).reshape((ny, nx), order="C")
-        
+        # NOTE: Fields will downcast to real (discard imaginary components) if A was real
+        hx_2d = (hx_m / norm).reshape((ny, nx), order="C")
+        hy_2d = (hy_m / norm).reshape((ny, nx), order="C")
+        hzj_2d = (hzj_m / norm).reshape((ny, nx), order="C")
 
-    # if nmodes == 1, Collapse hx, hy to 2D arrays, and return scalar neff
-    if nmodes == 1:  
-        hx = hx[:, :, 0]
-        hy = hy[:, :, 0]
-        hzj = hzj[:, :, 0]
-        neff = neff[0] 
+        Hx[:, :, m] = hx_2d
+        Hy[:, :, m] = hy_2d
+        Hzj[:, :, m] = hzj_2d
 
-    return neff, hx, hy, hzj
+        # Calculate E-fields at cell centers from H-fields at vertices
+        # using finite-difference curl relations
+        hx1 = hx_2d[1:, :-1]
+        hx2 = hx_2d[:-1, :-1]
+        hx3 = hx_2d[:-1, 1:]
+        hx4 = hx_2d[1:, 1:]
+
+        hy1 = hy_2d[1:, :-1]
+        hy2 = hy_2d[:-1, :-1]
+        hy3 = hy_2d[:-1, 1:]
+        hy4 = hy_2d[1:, 1:]
+
+        hzj1 = hzj_2d[1:, :-1]
+        hzj2 = hzj_2d[:-1, :-1]
+        hzj3 = hzj_2d[:-1, 1:]
+        hzj4 = hzj_2d[1:, 1:]
+
+        dHx_dy = (hx1 + hx4 - hx2 - hx3) / (2 * dy_cell)
+        dHy_dx = (hy3 + hy4 - hy1 - hy2) / (2 * dx_cell)
+        dHzj_dx = (hzj3 + hzj4 - hzj1 - hzj2) / (2 * dx_cell)
+        dHzj_dy = (hzj1 + hzj4 - hzj2 - hzj3) / (2 * dy_cell)
+        Hy_cell = (hy1 + hy2 + hy3 + hy4) / 4
+        Hx_cell = (hx1 + hx2 + hx3 + hx4) / 4
+
+        # From jωD = ∇ x H:
+        # Dx = -(1/k) ∂(Hz∙j)/∂y + (β/k) Hy
+        # Dy =  (1/k) ∂(Hz∙j)/∂x - (β/k) Hx
+        # Dz∙j = (1/k) (∂Hy/∂x - ∂Hx/∂y)
+        Dx = -dHzj_dy / k + (beta / k) * Hy_cell
+        Dy = +dHzj_dx / k - (beta / k) * Hx_cell
+        Dzj = (dHy_dx - dHx_dy) / k
+
+        # E = ε⁻¹ D
+        det = epsxx_cell * epsyy_cell - epsxy_cell * epsyx_cell
+        Ex[:, :, m] = (epsyy_cell * Dx - epsxy_cell * Dy) / det
+        Ey[:, :, m] = (epsxx_cell * Dy - epsyx_cell * Dx) / det
+        Ezj[:, :, m] = Dzj / epszz_cell
+
+    # Collocate H-fields to cell centers via linear interpolation
+    if collocate:
+        Hx = 0.25 * (Hx[:-1, :-1, :] + Hx[1:, :-1, :] + Hx[:-1, 1:, :] + Hx[1:, 1:, :])
+        Hy = 0.25 * (Hy[:-1, :-1, :] + Hy[1:, :-1, :] + Hy[:-1, 1:, :] + Hy[1:, 1:, :])
+        Hzj = 0.25 * (Hzj[:-1, :-1, :] + Hzj[1:, :-1, :] + Hzj[:-1, 1:, :] + Hzj[1:, 1:, :])
+
+    # if nmodes == 1, Collapse fields to 2D arrays, and return scalar neff
+    if nmodes == 1:
+        Ex = Ex[:, :, 0]
+        Ey = Ey[:, :, 0]
+        Ezj = Ezj[:, :, 0]
+        Hx = Hx[:, :, 0]
+        Hy = Hy[:, :, 0]
+        Hzj = Hzj[:, :, 0]
+        neff = neff[0]
+
+    return neff, Ex, Ey, Ezj, Hx, Hy, Hzj

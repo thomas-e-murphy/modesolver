@@ -5,6 +5,36 @@ All notable changes to the modesolver library are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0] - 2026-01-31
+
+### Breaking Changes
+- **`wgmodes()` now returns 7 values** instead of 4:
+  - Old: `neff, Hx, Hy, Hzj = wgmodes(...)`
+  - New: `neff, Ex, Ey, Ezj, Hx, Hy, Hzj = wgmodes(...)`
+  - E-fields are now computed internally and returned directly, eliminating the need to call `efields()` separately
+- **All example notebooks updated** for the new return signature
+
+### Added
+- **Field collocation support**: Both `wgmodes()` and `wgmodes_yee()` now accept `collocate=True` parameter
+  - Interpolates all field components to cell centers using linear averaging
+  - Returns six fields of identical shape `(ny, nx)` or `(ny, nx, nmodes)`
+  - Useful for visualization and post-processing where co-located fields are needed
+- **Generic `collocate()` function** (`postprocess/collocate.py`):
+  - Works with fields from either `wgmodes` or `wgmodes_yee`
+  - Automatically detects field grid positions from array shapes
+  - Interpolates all components to cell centers `(ny, nx)`
+  - Supports both single-mode (2D) and multi-mode (3D) arrays
+
+### Changed
+- **`poynting()` rewritten** to handle both collocated and non-collocated fields:
+  - Automatically detects whether input fields are already collocated
+  - If not collocated, calls `collocate()` internally before computing Poynting vector
+  - Works with output from `wgmodes`, `wgmodes_yee`, or pre-collocated fields
+  - Fixed bugs in previous version (undefined `neff` reference, incorrect recursive call)
+- **`wgmodes()` now computes E-fields internally** using the same curl relations as `efields()`
+  - Saves unpadded permittivity arrays before padding for accurate E-field calculation
+  - E-fields computed at cell centers, H-fields at vertices (unless `collocate=True`)
+
 ## [2.2.0] - 2026-01-30
 
 ### Added
