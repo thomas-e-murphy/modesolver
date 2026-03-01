@@ -1,6 +1,6 @@
 import numpy as np
 
-def unfold(x, y, xc, yc, *fields, boundary, unfold='',
+def unfold(x, y, xc, yc, *fields, boundary, unfold='', skip_coords=False,
            eps=None, epsxx=None, epsyy=None, epszz=None, epsxy=None, epsyx=None):
     """
     Unfold eigenmode solutions or permittivity arrays computed with symmetry
@@ -12,8 +12,8 @@ def unfold(x, y, xc, yc, *fields, boundary, unfold='',
     complete mode by mirroring the solution across specified boundaries,
     applying appropriate symmetries to each field component.
 
-    This function can unfold either field arrays OR permittivity arrays, but
-    not both in the same call.
+    This function can unfold field arrays, permittivity arrays, or both
+    together in a single call.
 
     USAGE:
 
@@ -26,6 +26,12 @@ def unfold(x, y, xc, yc, *fields, boundary, unfold='',
         # Unfold permittivity (isotropic):
         x, y, xc, yc, eps = mode.unfold(x, y, xc, yc,
                                          boundary='000M', unfold='W', eps=eps)
+
+        # Unfold BOTH fields and permittivity together (recommended):
+        x, y, xc, yc, hx, hy, hzj, eps = mode.unfold(
+            x, y, xc, yc, hx, hy, hzj,
+            boundary='000M', unfold='W', eps=eps
+        )
 
         # Unfold permittivity tensor (diagonal anisotropic):
         x, y, xc, yc, epsxx, epsyy, epszz = mode.unfold(
@@ -63,7 +69,8 @@ def unfold(x, y, xc, yc, *fields, boundary, unfold='',
             For multi-mode solutions, fields should have shape (ny, nx, nmodes)
             or (ny+1, nx+1, nmodes) depending on grid location.
 
-            Cannot be used together with eps keyword arguments.
+            Can be used together with eps keyword arguments. When used
+            together, the eps arrays are returned after the field arrays.
 
         boundary : str (keyword-only, required)
             4-character boundary condition string, same as used when computing
@@ -99,6 +106,18 @@ def unfold(x, y, xc, yc, *fields, boundary, unfold='',
 
             Default: '' (no unfolding)
 
+        skip_coords : bool (keyword-only, optional)
+            If True, skip coordinate unfolding and return the input coordinates
+            unchanged. Only the field/eps arrays will be unfolded. This is
+            useful when you need to unfold fields and eps in separate calls
+            (the second call should use skip_coords=True to avoid double-
+            unfolding the coordinates).
+
+            Default: False
+
+            Note: When unfolding both fields and eps together in a single call,
+            skip_coords is handled automatically and you don't need to set it.
+
         eps, epsxx, epsyy, epszz, epsxy, epsyx : ndarray (keyword-only, optional)
             Permittivity arrays to unfold. These are always unfolded with
             symmetric (even) parity. The grid location (cell-centered,
@@ -110,19 +129,24 @@ def unfold(x, y, xc, yc, *fields, boundary, unfold='',
                 - epsxx, epsyy, epszz (diagonal anisotropic)
                 - epsxx, epsxy, epsyx, epsyy, epszz (full anisotropic)
 
-            Cannot be used together with positional field arguments.
+            Can be used together with positional field arguments to unfold
+            both in a single call. When combined, eps arrays are returned
+            after field arrays in the return tuple.
 
     RETURNS:
 
         x, y : ndarray
-            Unfolded vertex coordinates.
+            Unfolded vertex coordinates (unchanged if skip_coords=True).
 
         xc, yc : ndarray
-            Unfolded cell-center coordinates.
+            Unfolded cell-center coordinates (unchanged if skip_coords=True).
 
-        *fields or *eps : ndarray
-            Unfolded field arrays or permittivity arrays, returned in the
-            same order as input.
+        *fields : ndarray (if field arguments provided)
+            Unfolded field arrays, returned in the same order as input.
+
+        *eps : ndarray (if eps arguments provided)
+            Unfolded permittivity arrays. When both fields and eps are
+            provided, eps arrays are returned after fields in the tuple.
 
     FIELD SYMMETRIES:
 
@@ -209,25 +233,39 @@ def unfold(x, y, xc, yc, *fields, boundary, unfold='',
             "Specify only one boundary per direction (not both N+S or both E+W)."
         )
 
-    # Determine mode: fields or eps
+    # Determine mode: fields, eps, or both
     has_fields = len(fields) > 0
     has_eps = any(v is not None for v in [eps, epsxx, epsyy, epszz, epsxy, epsyx])
-
-    if has_fields and has_eps:
-        raise ValueError("Cannot unfold both fields and eps in the same call. "
-                         "Use separate calls for fields and permittivity.")
 
     if not has_fields and not has_eps:
         raise ValueError("No fields or permittivity arrays provided to unfold")
 
-    # UNFOLD FIELDS
-    if has_fields:
-        return _unfold_fields(x, y, xc, yc, fields, boundary, unfold)
+    # UNFOLD FIELDS AND/OR EPS
+    if has_fields and has_eps:
+        # Both fields and eps: unfold them together using the same original
+        # coordinates for dimension detection. Coordinates are unfolded once.
+        x_orig, y_orig = x.copy(), y.copy()
 
-    # UNFOLD EPS
-    else:
+        # Unfold fields (this also unfolds coordinates)
+        x, y, xc, yc, *unfolded_fields = _unfold_fields(
+            x, y, xc, yc, fields, boundary, unfold
+        )
+
+        # Unfold eps using ORIGINAL coordinates for dimension detection,
+        # but skip returning new coordinates (we already have them from fields)
+        _, _, _, _, *unfolded_eps = _unfold_eps(
+            x_orig, y_orig, xc, yc, boundary, unfold,
+            eps, epsxx, epsyy, epszz, epsxy, epsyx,
+            skip_coords=True
+        )
+        return x, y, xc, yc, *unfolded_fields, *unfolded_eps
+    elif has_fields:
+        return _unfold_fields(x, y, xc, yc, fields, boundary, unfold,
+                              skip_coords=skip_coords)
+    else:  # has_eps only
         return _unfold_eps(x, y, xc, yc, boundary, unfold,
-                          eps, epsxx, epsyy, epszz, epsxy, epsyx)
+                          eps, epsxx, epsyy, epszz, epsxy, epsyx,
+                          skip_coords=skip_coords)
 
 
 def _detect_grid_location(field, ny, nx):
@@ -272,7 +310,7 @@ def _detect_grid_location(field, ny, nx):
     return y_location, x_location
 
 
-def _unfold_fields(x, y, xc, yc, fields, boundary, unfold):
+def _unfold_fields(x, y, xc, yc, fields, boundary, unfold, skip_coords=False):
     """Unfold field arrays with proper E/H field symmetries."""
 
     # Convert fields to list for easier manipulation
@@ -331,37 +369,51 @@ def _unfold_fields(x, y, xc, yc, fields, boundary, unfold):
         y_loc, x_loc = _detect_grid_location(field, ny, nx)
         grid_locations.append((y_loc, x_loc))
 
+    # Save original coordinates if we need to skip coordinate unfolding
+    x_out, y_out = x, y
+
     # Unfold each boundary in sequence (order: W, E, S, N)
     if 'W' in unfold:
-        x, fields = _unfold_west(x, fields, field_names, grid_locations, boundary[3])
-        nx = len(x) - 1
+        x_out, fields = _unfold_west(x_out, fields, field_names, grid_locations,
+                                      boundary[3], skip_coords)
+        if not skip_coords:
+            nx = len(x_out) - 1
         # Update grid locations after unfolding in x
         grid_locations = [(y_loc, x_loc) for y_loc, x_loc in grid_locations]
 
     if 'E' in unfold:
-        x, fields = _unfold_east(x, fields, field_names, grid_locations, boundary[2])
-        nx = len(x) - 1
+        x_out, fields = _unfold_east(x_out, fields, field_names, grid_locations,
+                                      boundary[2], skip_coords)
+        if not skip_coords:
+            nx = len(x_out) - 1
         grid_locations = [(y_loc, x_loc) for y_loc, x_loc in grid_locations]
 
     if 'S' in unfold:
-        y, fields = _unfold_south(y, fields, field_names, grid_locations, boundary[1])
-        ny = len(y) - 1
+        y_out, fields = _unfold_south(y_out, fields, field_names, grid_locations,
+                                       boundary[1], skip_coords)
+        if not skip_coords:
+            ny = len(y_out) - 1
         grid_locations = [(y_loc, x_loc) for y_loc, x_loc in grid_locations]
 
     if 'N' in unfold:
-        y, fields = _unfold_north(y, fields, field_names, grid_locations, boundary[0])
-        ny = len(y) - 1
+        y_out, fields = _unfold_north(y_out, fields, field_names, grid_locations,
+                                       boundary[0], skip_coords)
+        if not skip_coords:
+            ny = len(y_out) - 1
         grid_locations = [(y_loc, x_loc) for y_loc, x_loc in grid_locations]
 
-    # Recompute cell centers
-    xc = 0.5 * (x[:-1] + x[1:])
-    yc = 0.5 * (y[:-1] + y[1:])
+    # Recompute cell centers (or keep input if skip_coords)
+    if skip_coords:
+        xc_out, yc_out = xc, yc
+    else:
+        xc_out = 0.5 * (x_out[:-1] + x_out[1:])
+        yc_out = 0.5 * (y_out[:-1] + y_out[1:])
 
-    return x, y, xc, yc, *fields
+    return x_out, y_out, xc_out, yc_out, *fields
 
 
 def _unfold_eps(x, y, xc, yc, boundary, unfold,
-                eps, epsxx, epsyy, epszz, epsxy, epsyx):
+                eps, epsxx, epsyy, epszz, epsxy, epsyx, skip_coords=False):
     """Unfold permittivity arrays with symmetric (even) parity."""
 
     # Determine which eps components are provided
@@ -384,8 +436,12 @@ def _unfold_eps(x, y, xc, yc, boundary, unfold,
     component_names = list(eps_components.keys())
     component_arrays = [np.asarray(eps_components[name]) for name in component_names]
 
+    # Use input coordinates for dimension detection
     nx = len(x) - 1  # Number of cells
     ny = len(y) - 1
+
+    # Save original coordinates if we need to skip coordinate unfolding
+    x_out, y_out = x, y
 
     # Detect grid location for each eps component
     grid_locations = []
@@ -396,48 +452,57 @@ def _unfold_eps(x, y, xc, yc, boundary, unfold,
     # Unfold each boundary in sequence (eps is always symmetric/even)
     if 'W' in unfold:
         if boundary[3] != '0':  # Skip Dirichlet boundary
-            x, component_arrays = _unfold_eps_boundary(
-                x, component_arrays, grid_locations, 'west'
+            x_out, component_arrays = _unfold_eps_boundary(
+                x_out, component_arrays, grid_locations, 'west', skip_coords
             )
-            nx = len(x) - 1
+            if not skip_coords:
+                nx = len(x_out) - 1
 
     if 'E' in unfold:
         if boundary[2] != '0':
-            x, component_arrays = _unfold_eps_boundary(
-                x, component_arrays, grid_locations, 'east'
+            x_out, component_arrays = _unfold_eps_boundary(
+                x_out, component_arrays, grid_locations, 'east', skip_coords
             )
-            nx = len(x) - 1
+            if not skip_coords:
+                nx = len(x_out) - 1
 
     if 'S' in unfold:
         if boundary[1] != '0':
-            y, component_arrays = _unfold_eps_boundary(
-                y, component_arrays, grid_locations, 'south'
+            y_out, component_arrays = _unfold_eps_boundary(
+                y_out, component_arrays, grid_locations, 'south', skip_coords
             )
-            ny = len(y) - 1
+            if not skip_coords:
+                ny = len(y_out) - 1
 
     if 'N' in unfold:
         if boundary[0] != '0':
-            y, component_arrays = _unfold_eps_boundary(
-                y, component_arrays, grid_locations, 'north'
+            y_out, component_arrays = _unfold_eps_boundary(
+                y_out, component_arrays, grid_locations, 'north', skip_coords
             )
-            ny = len(y) - 1
+            if not skip_coords:
+                ny = len(y_out) - 1
 
-    # Recompute cell centers
-    xc = 0.5 * (x[:-1] + x[1:])
-    yc = 0.5 * (y[:-1] + y[1:])
+    # Recompute cell centers (or keep input if skip_coords)
+    if skip_coords:
+        xc_out, yc_out = xc, yc
+    else:
+        xc_out = 0.5 * (x_out[:-1] + x_out[1:])
+        yc_out = 0.5 * (y_out[:-1] + y_out[1:])
 
-    return x, y, xc, yc, *component_arrays
+    return x_out, y_out, xc_out, yc_out, *component_arrays
 
 
-def _unfold_eps_boundary(coord, eps_arrays, grid_locations, direction):
+def _unfold_eps_boundary(coord, eps_arrays, grid_locations, direction, skip_coords=False):
     """
     Unfold eps arrays across a single boundary.
 
     All eps components are symmetric (even), but grid location varies.
     """
 
-    # Mirror coordinate
-    if direction == 'west':
+    # Mirror coordinate (unless skip_coords is True)
+    if skip_coords:
+        coord_new = coord
+    elif direction == 'west':
         coord_mirror = 2 * coord[0] - coord[1:][::-1]
         coord_new = np.concatenate([coord_mirror, coord])
     elif direction == 'east':
@@ -487,16 +552,19 @@ def _unfold_eps_boundary(coord, eps_arrays, grid_locations, direction):
     return coord_new, eps_new
 
 
-def _unfold_west(x, fields, field_names, grid_locations, boundary_symmetry):
+def _unfold_west(x, fields, field_names, grid_locations, boundary_symmetry, skip_coords=False):
     """Unfold across west boundary (vertical line at x[0])."""
 
     # Skip if Dirichlet boundary (no symmetry to unfold)
     if boundary_symmetry == '0':
         return x, fields
 
-    # Create mirrored x coordinates
-    x_mirror = 2 * x[0] - x[1:][::-1]
-    x_new = np.concatenate([x_mirror, x])
+    # Create mirrored x coordinates (unless skip_coords)
+    if skip_coords:
+        x_new = x
+    else:
+        x_mirror = 2 * x[0] - x[1:][::-1]
+        x_new = np.concatenate([x_mirror, x])
 
     # Unfold each field
     fields_new = []
@@ -527,16 +595,19 @@ def _unfold_west(x, fields, field_names, grid_locations, boundary_symmetry):
     return x_new, fields_new
 
 
-def _unfold_east(x, fields, field_names, grid_locations, boundary_symmetry):
+def _unfold_east(x, fields, field_names, grid_locations, boundary_symmetry, skip_coords=False):
     """Unfold across east boundary (vertical line at x[-1])."""
 
     # Skip if Dirichlet boundary
     if boundary_symmetry == '0':
         return x, fields
 
-    # Create mirrored x coordinates
-    x_mirror = 2 * x[-1] - x[:-1][::-1]
-    x_new = np.concatenate([x, x_mirror])
+    # Create mirrored x coordinates (unless skip_coords)
+    if skip_coords:
+        x_new = x
+    else:
+        x_mirror = 2 * x[-1] - x[:-1][::-1]
+        x_new = np.concatenate([x, x_mirror])
 
     # Unfold each field
     fields_new = []
@@ -567,16 +638,19 @@ def _unfold_east(x, fields, field_names, grid_locations, boundary_symmetry):
     return x_new, fields_new
 
 
-def _unfold_south(y, fields, field_names, grid_locations, boundary_symmetry):
+def _unfold_south(y, fields, field_names, grid_locations, boundary_symmetry, skip_coords=False):
     """Unfold across south boundary (horizontal line at y[0])."""
 
     # Skip if Dirichlet boundary
     if boundary_symmetry == '0':
         return y, fields
 
-    # Create mirrored y coordinates
-    y_mirror = 2 * y[0] - y[1:][::-1]
-    y_new = np.concatenate([y_mirror, y])
+    # Create mirrored y coordinates (unless skip_coords)
+    if skip_coords:
+        y_new = y
+    else:
+        y_mirror = 2 * y[0] - y[1:][::-1]
+        y_new = np.concatenate([y_mirror, y])
 
     # Unfold each field
     fields_new = []
@@ -607,16 +681,19 @@ def _unfold_south(y, fields, field_names, grid_locations, boundary_symmetry):
     return y_new, fields_new
 
 
-def _unfold_north(y, fields, field_names, grid_locations, boundary_symmetry):
+def _unfold_north(y, fields, field_names, grid_locations, boundary_symmetry, skip_coords=False):
     """Unfold across north boundary (horizontal line at y[-1])."""
 
     # Skip if Dirichlet boundary
     if boundary_symmetry == '0':
         return y, fields
 
-    # Create mirrored y coordinates
-    y_mirror = 2 * y[-1] - y[:-1][::-1]
-    y_new = np.concatenate([y, y_mirror])
+    # Create mirrored y coordinates (unless skip_coords)
+    if skip_coords:
+        y_new = y
+    else:
+        y_mirror = 2 * y[-1] - y[:-1][::-1]
+        y_new = np.concatenate([y, y_mirror])
 
     # Unfold each field
     fields_new = []

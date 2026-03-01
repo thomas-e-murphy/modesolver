@@ -5,6 +5,33 @@ All notable changes to the modesolver library are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [3.0.1] - 2026-02-28
+
+### Added
+- **`gsm_step()` function** (`postprocess/scattering.py`): Compute generalized scattering matrices at waveguide step discontinuities using the mode-matching technique
+  - Calculates S11, S12, S21, S22 matrices relating incident and scattered mode amplitudes
+  - Supports both uniform grids (scalar dx, dy) and non-uniform grids (array dx, dy)
+  - `normalize=True` option returns power-normalized S-matrix where |S_mn|² gives direct power coupling efficiency
+  - Automatically collocates fields if needed (works with output from `wgmodes`, `wgmodes_yee`, or pre-collocated fields)
+  - Validates power conservation (S†S = I for lossless waveguides)
+  - Based on: G. V. Eleftheriades et al., "Some Important Properties of Waveguide Junction Generalized Scattering Matrices," IEEE Trans. MTT, vol. 42, no. 10, 1994
+- **`skip_coords` parameter for `unfold()`**: Allows skipping coordinate unfolding when making multiple calls
+  - Useful for edge cases where separate field and eps unfolding calls are needed
+  - Second call can use `skip_coords=True` to avoid double-unfolding coordinates
+- **New example notebook** (`examples/waveguide_junction.ipynb`): Demonstrates scattering matrix calculation at a silicon nitride waveguide width transition
+- **Cubic PML stretching method** (`geometry/pml.py`): New `'C'` method for `stretchmesh()`
+  - Implements a quartic coordinate map corresponding to a cubic (m=3) conductivity profile, the standard used by Lumerical and Tidy3D
+  - For PML use, supply `factor = 1 + 1j*A` where `A = sigma_max / (4*omega*eps)`; typical values of `sigma_max / (omega*eps)` are 1–2, so `A` ~ 0.25–0.5
+
+### Changed
+- **`unfold()` now supports combining fields and eps in a single call**:
+  - Previously required two separate calls which caused errors (coordinates were unfolded twice)
+  - New recommended usage: `x, y, xc, yc, hx, hy, hzj, eps = unfold(x, y, xc, yc, hx, hy, hzj, boundary='000M', unfold='W', eps=eps)`
+  - When both are provided, eps arrays are returned after field arrays in the tuple
+  - Backward compatible: existing single-purpose calls continue to work unchanged
+
 ## [3.0.0] - 2026-01-31
 
 ### Breaking Changes

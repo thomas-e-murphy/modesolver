@@ -18,6 +18,6 @@ from .wgmodes import wgmodes
 from .wgmodes_yee import wgmodes_yee
 from .svmodes import svmodes
 from .geometry import waveguidemesh, waveguidemeshfull, fibermesh, stretchmesh, padmesh, trimmesh
-from .postprocess import collocate, poynting, unfold
+from .postprocess import collocate, poynting, unfold, gsm_step
 
-__all__ = ["wgmodes", "wgmodes_yee", "svmodes", "waveguidemesh", "waveguidemeshfull", "fibermesh", "stretchmesh", "padmesh", "trimmesh", "collocate", "poynting", "unfold"]
+__all__ = ["wgmodes", "wgmodes_yee", "svmodes", "waveguidemesh", "waveguidemeshfull", "fibermesh", "stretchmesh", "padmesh", "trimmesh", "collocate", "poynting", "unfold", "gsm_step"]

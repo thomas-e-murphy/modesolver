@@ -64,6 +64,13 @@ def stretchmesh(x, y, nlayers, factor, method="PPPP"):
             'L' : linear
             'P' : parabolic (default)
             'G' : geometric
+            'C' : cubic (quartic coordinate map; cubic conductivity profile,
+                  m=3, as used by Lumerical and Tidy3D).  For PML use,
+                  supply factor = 1 + 1j*A where A = sigma_max / (4*omega*eps).
+                  Equivalently, sigma_max / (omega*eps) = 4*A.  The factor of
+                  4 arises from integrating the cubic profile over the layer:
+                  integral_0^d (xi/d)^3 dxi = d/4.  Typical values of
+                  sigma_max / (omega*eps) are 1-2, so A ~ 0.25-0.5.
         Example: method='LLLG' uses linear stretching on the north, south,
         and east boundaries, and geometric stretching on the west boundary.
 
@@ -117,10 +124,10 @@ def stretchmesh(x, y, nlayers, factor, method="PPPP"):
             return arr
 
         N = arr.size
-        if method_char in "ULPG":
+        if method_char in "ULPGC":
             pass
         else:
-            raise ValueError("method must contain only U, L, P, G")
+            raise ValueError("method must contain only U, L, P, G, C")
 
         # Determine slice indices
         if direction == "high":
@@ -151,6 +158,9 @@ def stretchmesh(x, y, nlayers, factor, method="PPPP"):
             B = _solve_b(alpha)
             A = (q2 - q1) / B
             new_vals = q1 + A * (np.exp((arr[kv] - q1) / A) - 1)
+
+        elif method_char == "C":  # Cubic (m=3 conductivity profile)
+            new_vals = arr[kv] + (f - 1) * (arr[kv] - q1) ** 4 / (q2 - q1) ** 3
 
         # Promote arr only if needed
         arr = _maybe_promote(arr, new_vals)
