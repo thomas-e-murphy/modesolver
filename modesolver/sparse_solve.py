@@ -65,6 +65,10 @@ class SparseSolver:
         """Solve A·x = b for x, where A was previously factored."""
         raise NotImplementedError
 
+    def free(self):
+        """Release any solver-internal memory. No-op by default."""
+        pass
+
 
 class SuperLUSolver(SparseSolver):
     """Sparse solver using SciPy's SuperLU (always available)."""
@@ -81,6 +85,10 @@ class SuperLUSolver(SparseSolver):
     def solve(self, b):
         """Solve A·x = b using the LU factorization."""
         return self._lu.solve(b)
+
+    def free(self):
+        if hasattr(self, '_lu'):
+            self._lu = None
 
 
 class PyPardisoSolver(SparseSolver):
@@ -105,6 +113,11 @@ class PyPardisoSolver(SparseSolver):
         """Solve A·x = b using PARDISO."""
         return self._solver.solve(self._A, b)
 
+    def free(self):
+        """Release PARDISO factorization memory."""
+        if hasattr(self, '_solver'):
+            self._solver.free_memory('all')
+
 
 class MUMPSSolver(SparseSolver):
     """Sparse solver using MUMPS (supports real and complex matrices)."""
@@ -125,6 +138,10 @@ class MUMPSSolver(SparseSolver):
     def solve(self, b):
         """Solve A·x = b using MUMPS factorization."""
         return self._ctx.solve(b)
+
+    def free(self):
+        if hasattr(self, '_ctx'):
+            del self._ctx
 
 
 def get_optimal_solver(A, solver=None):
@@ -222,8 +239,8 @@ def make_shift_invert_operator(A, sigma, solver=None):
     -------
     OPinv : LinearOperator
         A LinearOperator that applies (A - sigma*I)^{-1}.
-    solver_name : str
-        The name of the solver being used.
+    sparse_solver : SparseSolver
+        The solver instance; call sparse_solver.free() when done.
 
     Notes
     -----
@@ -233,7 +250,7 @@ def make_shift_invert_operator(A, sigma, solver=None):
     Example
     -------
     >>> from scipy.sparse.linalg import eigs
-    >>> OPinv, solver_name = make_shift_invert_operator(A, sigma)
+    >>> OPinv, sparse_solver = make_shift_invert_operator(A, sigma)
     >>> vals, vecs = eigs(A, k=nmodes, sigma=sigma, OPinv=OPinv, which="LM")
     """
     n = A.shape[0]
@@ -257,4 +274,4 @@ def make_shift_invert_operator(A, sigma, solver=None):
         dtype=dtype
     )
 
-    return OPinv, sparse_solver.name
+    return OPinv, sparse_solver

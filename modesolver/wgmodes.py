@@ -745,8 +745,10 @@ def wgmodes(
     B.eliminate_zeros()
 
     shift = (k*guess)**2
-    OPinv, _ = make_shift_invert_operator(A, shift, solver=solver)
+    OPinv, sparse_solver = make_shift_invert_operator(A, shift, solver=solver)
     vals, vecs = eigs(A, k=nmodes, sigma=shift, OPinv=OPinv, which="LM")
+    sparse_solver.free()
+    del OPinv, sparse_solver
 
     # allocate space for result
     if np.iscomplexobj(A):

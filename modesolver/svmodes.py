@@ -234,8 +234,10 @@ def svmodes(wavelength, guess, nmodes, dx, dy, eps, boundary, field, *, solver=N
     # Solve the sparse eigenvalue problem A·phi = β²·phi
     shift = (2.0 * np.pi * guess / wavelength) ** 2  # = (k*guess)^2
 
-    OPinv, _ = make_shift_invert_operator(A, shift, solver=solver)
+    OPinv, sparse_solver = make_shift_invert_operator(A, shift, solver=solver)
     vals, vecs = eigs(A, k=nmodes, sigma=shift, OPinv=OPinv, which="LM", tol=1e-8)
+    sparse_solver.free()
+    del OPinv, sparse_solver
 
     if np.iscomplexobj(A.data):
         neff = np.zeros((nmodes,), dtype=complex)

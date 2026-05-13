@@ -7,6 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`field_to_bitmap()` function** (`postprocess/export.py`): Export any 2D scalar field
+  to an indexed-color PNG or TIFF with square pixels, resampling from the (possibly
+  non-uniform or staggered) input grid to a user-specified uniform output grid:
+  - Accepts any field grid location (cell-centered, vertex-centered, or Yee-staggered
+    edge); caller passes the 1D coordinate arrays matching the field's actual grid
+  - `dpx` parameter sets the square pixel size; defaults to the median input grid spacing
+  - `xmin`/`xmax`/`ymin`/`ymax` window crops or extends the output domain; pixels outside
+    the input domain are filled by clamping to the nearest input edge value (matching
+    the implicit behavior of `pcolormesh` with flat shading)
+  - `cmap` selects any matplotlib colormap; the 256-entry palette is embedded in the image
+  - `vmin`/`vmax` control the data range mapped to palette indices 0–255
+  - `vcenter` forces a symmetric colormap range about a specified value (e.g.
+    `vcenter=0` with `cmap='seismic'` for signed field components); may be combined
+    with `vmin` or `vmax` (but not both) to set the half-range explicitly
+  - File format (PNG or TIFF) inferred automatically from the filename extension by Pillow
+  - Returns a `PIL.Image` object (mode `'P'`); also saves to file if `filename` is given
+  - New dependency: `Pillow`; `scipy` and `matplotlib` are also used
+- **`field_to_contours()` function** (`postprocess/export.py`): Generate a transparent
+  SVG contour overlay to pair with `field_to_bitmap` output:
+  - Accepts the same `field`, `x`, `y`, `xmin`/`xmax`/`ymin`/`ymax` arguments as
+    `field_to_bitmap`; specifying the same window in both calls ensures the SVG covers
+    the same physical region as the PNG and can be scaled to overlay it precisely in
+    any vector editor
+  - Figure viewport aspect ratio is derived from the physical window, so the SVG is
+    geometrically correct at any scale with no manual adjustment needed
+  - `levels` passed directly to `matplotlib contour()` — caller supplies values in
+    whatever units are desired (raw field, dB, normalized, etc.)
+  - `colors`, `linewidths`, `linestyles` passed through to `ax.contour()`; defaults
+    to solid black 0.5-pt lines
+  - Output is a pure vector SVG with transparent background, compatible with Adobe
+    Illustrator, Inkscape, and similar tools
+  - Saves to file if `filename` is given; always returns the `Figure` for inline
+    display or further customization (e.g. `plt.close(fig)` after `display(fig)`)
+- **`group_index()` function** (`postprocess/group_index.py`): Compute the group index of a waveguide mode using the weighted integral formula:
+  - Numerator: ∫∫ [(2·ng·n − n²)·|E|² + |H|²] dA, where ng(x,y) and n(x,y) are the local group and phase indices of the constituent materials
+  - Denominator: ∫∫ (E×H* + E*×H)·ẑ dA (equal to 4·Sz from `poynting()`)
+  - **Isotropic materials only**: the scalar ng/n formulation assumes each material has a scalar permittivity; anisotropic materials would require per-component group indices
+  - Automatically collocates staggered fields to cell centres if needed (works with output from `wgmodes`, `wgmodes_yee`, or pre-collocated fields)
+  - Supports non-uniform grids: cell areas computed from exact dx/dy vectors via `np.outer(dy, dx)`
+  - Integration uses the Riemann (midpoint-rule) sum, which is second-order accurate for cell-centred fields
+  - Multi-mode support: returns a scalar for 2-D field input (nmodes=1) and an array of shape (nmodes,) for 3-D field input
+
+### Fixed
+- **Memory leak in sparse solver interface** (`sparse_solve.py`, `wgmodes.py`, `wgmodes_yee.py`, `svmodes.py`): Solver factorization memory is now released immediately after each eigensolve, preventing `PyPardisoError: error code -2 (Not enough memory)` and equivalent accumulation in MUMPS when the modesolver is called hundreds of times in a loop
+  - `make_shift_invert_operator()` now returns the solver object instead of its name string, giving callers explicit ownership and the ability to free resources deterministically
+  - `SparseSolver` base class gains a no-op `free()` method so all subclasses are safe to call without a type check
+  - `PyPardisoSolver.free()` calls PARDISO's `free_memory('all')` to release Intel MKL internal factorization memory
+  - `MUMPSSolver.free()` explicitly drops the MUMPS context, triggering immediate deallocation of Fortran-allocated symbolic and numeric factorization memory
+  - `SuperLUSolver.free()` releases the SciPy SuperLU factorization object
+  - All three eigensolve call sites (`wgmodes`, `wgmodes_yee`, `svmodes`) now call `sparse_solver.free()` and `del OPinv, sparse_solver` immediately after `eigs()` returns
+
 ## [3.0.1] - 2026-02-28
 
 ### Added

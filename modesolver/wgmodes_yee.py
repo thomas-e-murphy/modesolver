@@ -410,8 +410,10 @@ def wgmodes_yee(
                By + (1.0/k0**2) * (By @ Ax - Bx @ Ay) @ epsz_inv @ Dx]], format="csr")
 
     shift = (k0*guess)**2
-    OPinv, _ = make_shift_invert_operator(U, shift, solver=solver)
+    OPinv, sparse_solver = make_shift_invert_operator(U, shift, solver=solver)
     vals, vecs = eigs(U, k=nmodes, sigma=shift, OPinv=OPinv, which="LM")
+    sparse_solver.free()
+    del OPinv, sparse_solver
 
     # allocate space for result
     if np.iscomplexobj(U):
