@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "modesolver"
-version = "3.0.0"
+version = "3.0.2"
 description = "Vector Finite Difference Modesolver for Anisotropic Dielectric Waveguides"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -17,12 +17,16 @@ dependencies = [
     "scipy",
     "matplotlib",
     "Pillow",
+    "shapely",
 ]
 
 [project.optional-dependencies]
 fast = [
     "pypardiso",
     "python-mumps>=0.0.6",
+]
+gds = [
+    "gdstk",
 ]
 
 [tool.setuptools]

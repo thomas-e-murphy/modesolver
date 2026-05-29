@@ -5,9 +5,79 @@ All notable changes to the modesolver library are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [3.0.2] - 2026-05-28
 
 ### Added
+- **`layoutmesh()` function** (`geometry/layoutmesh.py`): Build a finite-difference
+  permittivity grid from a `GeometryModel` plus a `{label → n}` mapping, bridging the
+  new label-based geometry representation with the numerical solver interface:
+  - Accepts isotropic (`n` scalar) or diagonal-anisotropic (`(n_x, n_y, n_z)` 3-tuple)
+    refractive indices per label; single value is broadcast to all three components.
+  - `method='center'` (default): point-sample `label_at_point` at each cell centre —
+    fast, equivalent in spirit to the legacy `waveguidemesh` routine.
+  - `method='fill'`: area-weighted sub-cell averaging via `fill_fractions` — more
+    accurate at material interfaces.
+  - Always returns three separate permittivity tensors `epsxx`, `epsyy`, `epszz`
+    (never a single isotropic `eps`):
+    - `yee=False` (default): cell-centred tensors, each of shape ``(ny, nx)``.
+      For isotropic materials ``epsxx == epsyy == epszz``; for anisotropic
+      materials each holds ``n_x²``, ``n_y²``, or ``n_z²`` respectively.
+    - `yee=True`: Yee-staggered tensors with shapes matching the field-component
+      grid locations used by `wgmodes_yee`:
+      - `epsxx` ``(ny+1, nx)`` — at Ex / Hy locations (x-edge midpoints)
+      - `epsyy` ``(ny, nx+1)`` — at Ey / Hx locations (y-edge midpoints)
+      - `epszz` ``(ny+1, nx+1)`` — at Ez corner locations
+      - Boundary rows/columns use half-cell windows clipped to the domain edge,
+        so no ghost cells are needed; `method='fill'` is used regardless of
+        the *method* argument.
+  - Return tuple: `(x, y, xc, yc, nx, ny, epsxx, epsyy, epszz)` in both cases.
+- **`boundary_segments()` function** (`geometry/layoutmesh.py`): Returns a list of
+  polyline coordinate arrays tracing the material-interface boundaries within the
+  computational domain, suitable for overlaying on permittivity or field plots:
+  - Boundaries between adjacent regions sharing the same material label are
+    suppressed; segments coinciding with the domain boundary are excluded.
+  - Priority-based overlap resolution mirrors `layoutmesh()`.
+  - Each element has shape ``(M, 2)`` and represents a connected polyline of
+    ``(x, y)`` coordinates; pass directly to
+    `matplotlib.collections.LineCollection`.
+- **`wgmodes_yee` staggered-eps support** (`wgmodes_yee.py`): Auto-detects whether
+  the supplied `epsxx`/`epsyy`/`epszz` are in the legacy cell-centred format
+  `(ny, nx)` or the new Yee-located format `(ny+1, nx)` / `(ny, nx+1)` /
+  `(ny+1, nx+1)`.  Backward compatible — existing code using `(ny, nx)` tensors
+  continues to work unchanged.  When staggered tensors are detected, the internal
+  cell-averaging step is bypassed and the pre-computed values are used directly.
+- **Geometry/layout subsystem** (`geometry/layout.py`): A new, clean module
+  for representing labeled 2D material geometry in real (physical) coordinates,
+  independent of the numerical mesh and refractive indices.  Key components:
+  - **`Layer`** / **`LayerStack`**: define an ordered, non-overlapping vertical
+    background structure with string material labels (e.g. `"substrate"`,
+    `"cladding"`).  The stack sorts layers automatically, raises on overlap,
+    and supports an optional `default_label` for gaps or regions outside the
+    defined extent.
+  - **`Region`** / **`GeometryModel`**: a bounded 2D object (backed by Shapely)
+    with a label and integer priority.  `GeometryModel` combines a `LayerStack`
+    background with zero or more finite `Region` objects and uses a Shapely
+    `STRtree` for efficient spatial queries.
+  - **Factory functions**: `rectangle()`, `polygon()`, `disk()` (circle
+    approximated by an n-gon), and `from_shapely()` for wrapping any existing
+    Shapely geometry.
+  - **`label_at_point(x, y)`**: returns the effective material label at a
+    point; finite regions override the background layer by priority, with
+    last-added winning on ties.
+  - **`fill_fractions(xmin, xmax, ymin, ymax)`**: returns a `{label: fraction}`
+    dict over a rectangular cell for sub-cell dielectric averaging; fractions
+    sum to 1.0 and use Shapely intersection areas.
+  - **`clip_to_domain(xmin, xmax, ymin, ymax)`**: clips all geometry to a
+    rectangular computational domain and returns a priority-sorted list of
+    `ClippedShape` objects ready for mesh assignment or rendering.
+  - **`plot()`**: simple matplotlib visualization of the clipped geometry with
+    auto-assigned colors per label.
+  - **Optional GDS I/O** (`gds_import()`, `gds_export()`): import polygons
+    from GDSII files and export geometry back to GDSII, mapping string labels
+    to GDS layer/datatype integer pairs.  Requires the optional `gdstk`
+    package (`pip install modesolver[gds]`).
+  - New required dependency: `shapely`.
+  - New optional dependency group `[gds]`: `gdstk`.
 - **`field_to_bitmap()` function** (`postprocess/export.py`): Export any 2D scalar field
   to an indexed-color PNG or TIFF with square pixels, resampling from the (possibly
   non-uniform or staggered) input grid to a user-specified uniform output grid:

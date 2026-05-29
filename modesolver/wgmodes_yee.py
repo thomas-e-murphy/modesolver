@@ -137,9 +137,36 @@ def wgmodes_yee(
     else:
         raise ValueError("Must supply either eps or epsxx/yy/zz.")
 
-    if not (epsxx.shape == epsyy.shape == epszz.shape):
-        raise ValueError("All eps* components must have the same shape")
-    
+    # Detect whether pre-averaged Yee tensors or legacy cell-centred tensors are supplied.
+    #
+    #   Legacy (cell-centred):  epsxx, epsyy, epszz all (ny, nx)
+    #       → solver averages adjacent cells internally (original behaviour).
+    #
+    #   Staggered (Yee-located): epsxx (ny+1, nx), epsyy (ny, nx+1), epszz (ny+1, nx+1)
+    #       → tensors are already at the correct Yee grid points; use them directly.
+    #       Produced by layoutmesh(..., yee=True).
+    #
+    if epsxx.shape == epsyy.shape == epszz.shape:
+        _staggered_yee = False
+        ny, nx = epsxx.shape
+        epsxx = np.pad(epsxx, pad_width=1, mode='edge')
+        epsyy = np.pad(epsyy, pad_width=1, mode='edge')
+        epszz = np.pad(epszz, pad_width=1, mode='edge')
+    elif (epsxx.ndim == 2 and epsyy.ndim == 2 and epszz.ndim == 2
+          and epsxx.shape[0] == epsyy.shape[0] + 1    # ny+1 vs ny
+          and epsxx.shape[1] == epsyy.shape[1] - 1    # nx   vs nx+1
+          and epszz.shape == (epsxx.shape[0], epsyy.shape[1])):   # (ny+1, nx+1)
+        _staggered_yee = True
+        ny = epsxx.shape[0] - 1
+        nx = epsxx.shape[1]
+    else:
+        raise ValueError(
+            "epsxx/epsyy/epszz shapes are incompatible.  Expected either:\n"
+            "  Legacy (cell-centred):  all (ny, nx)\n"
+            "  Staggered (Yee-located): epsxx (ny+1, nx), "
+            "epsyy (ny, nx+1), epszz (ny+1, nx+1)"
+        )
+
     boundary = boundary.upper()
 
     if len(boundary) != 4:
@@ -147,16 +174,10 @@ def wgmodes_yee(
 
     if any(ch not in set("EM0") for ch in boundary):
         raise ValueError("boundary string may contain only E, M, or 0")
-    
+
     sign = {"0":  0.0,   # Hx = Hy = Hz = 0 just outside boundary
-            "E": +1.0,   # PEC -> H_parallel is symmetric (even) 
+            "E": +1.0,   # PEC -> H_parallel is symmetric (even)
             "M": -1.0 }  # PMC -> H_parallel is antisymmetric (odd)
-
-    ny, nx = epsxx.shape
-
-    epsxx = np.pad(epsxx, pad_width=1, mode='edge')
-    epsyy = np.pad(epsyy, pad_width=1, mode='edge')
-    epszz = np.pad(epszz, pad_width=1, mode='edge')
 
     if np.isscalar(dx):   # uniform x grid
         dx = np.full(nx + 2, dx)
@@ -352,37 +373,53 @@ def wgmodes_yee(
     vals = np.concatenate([vw[ke], ve[kw]])
     Dx = coo_matrix((vals, (rows, cols)), shape=(K, M)).tocsr()
     
-    # ϵx = geometric weighted average of adjacent north and south cells
-    epsS = epsxx[0:ny+1, 1:nx+1]   # south-adjacent epsxx
-    epsN = epsxx[1:ny+2, 1:nx+1]   # north-adjacent epsxx
-    s = dy[0:ny+1]
-    n = dy[1:ny+2]
-    d = ((n[:, None]*epsN + s[:, None]*epsS) / (n + s)[:, None]).ravel(order="C")
-    epsx = diags(d, 0, format="csr")
-    epsx_inv = diags(1.0/d, 0, format="csr")
+    if _staggered_yee:
+        # Pre-averaged tensors: ravel directly onto the Yee grid vectors.
+        #   epsxx : (ny+1, nx)     → M = (ny+1)*nx   values for epsx diagonal
+        #   epsyy : (ny, nx+1)     → N = ny*(nx+1)   values for epsy diagonal
+        #   epszz : (ny+1, nx+1)   → K = (ny+1)*(nx+1) values for epsz diagonal
+        d = epsxx.ravel(order="C")
+        epsx     = diags(d,     0, format="csr")
+        epsx_inv = diags(1.0/d, 0, format="csr")
+        d = epsyy.ravel(order="C")
+        epsy     = diags(d,     0, format="csr")
+        epsy_inv = diags(1.0/d, 0, format="csr")
+        d = 1.0 / epszz.ravel(order="C")
+        epsz_inv = diags(d,     0, format="csr")
+    else:
+        # Legacy: distance-weighted average of adjacent padded cells.
+        s = dy[0:ny+1]
+        n = dy[1:ny+2]
+        w = dx[0:nx+1]
+        e = dx[1:nx+2]
 
-    # ϵy = geometric weighted average of adjacent east and west cells
-    epsW = epsyy[1:ny+1, 0:nx+1]   # west-adjacent epsyy
-    epsE = epsyy[1:ny+1, 1:nx+2]   # east-adjacent epsyy
-    w = dx[0:nx+1]
-    e = dx[1:nx+2]
-    d = ((e[None, :]*epsE + w[None, :]*epsW) / (e + w)[None, :]).ravel(order="C")
-    epsy = diags(d, 0, format="csr")
-    epsy_inv = diags(1.0/d, 0, format="csr")
+        # ϵx = distance-weighted average of adjacent north and south cells
+        epsS = epsxx[0:ny+1, 1:nx+1]   # south-adjacent epsxx
+        epsN = epsxx[1:ny+2, 1:nx+1]   # north-adjacent epsxx
+        d = ((n[:, None]*epsN + s[:, None]*epsS) / (n + s)[:, None]).ravel(order="C")
+        epsx     = diags(d,     0, format="csr")
+        epsx_inv = diags(1.0/d, 0, format="csr")
 
-    # ϵz = geometric weighted average of adjacent SW, NW, NE, and SE cells
-    epsSW = epszz[0:ny+1, 0:nx+1]
-    epsSE = epszz[0:ny+1, 1:nx+2]
-    epsNW = epszz[1:ny+2, 0:nx+1]
-    epsNE = epszz[1:ny+2, 1:nx+2]
-    d = ((
-        (n[:, None] * w[None, :] * epsNW) +
-        (s[:, None] * w[None, :] * epsSW) +
-        (s[:, None] * e[None, :] * epsSE) +
-        (n[:, None] * e[None, :] * epsNE)
-    ) / ((n + s)[:, None] * (e + w)[None, :])).ravel(order="C")
-    # epsz = diags(d, 0, format="csr")     # note: epsz is not needed
-    epsz_inv = diags(1.0/d, 0, format="csr")
+        # ϵy = distance-weighted average of adjacent east and west cells
+        epsW = epsyy[1:ny+1, 0:nx+1]   # west-adjacent epsyy
+        epsE = epsyy[1:ny+1, 1:nx+2]   # east-adjacent epsyy
+        d = ((e[None, :]*epsE + w[None, :]*epsW) / (e + w)[None, :]).ravel(order="C")
+        epsy     = diags(d,     0, format="csr")
+        epsy_inv = diags(1.0/d, 0, format="csr")
+
+        # ϵz = distance-weighted average of adjacent SW, NW, NE, and SE cells
+        epsSW = epszz[0:ny+1, 0:nx+1]
+        epsSE = epszz[0:ny+1, 1:nx+2]
+        epsNW = epszz[1:ny+2, 0:nx+1]
+        epsNE = epszz[1:ny+2, 1:nx+2]
+        d = ((
+            (n[:, None] * w[None, :] * epsNW) +
+            (s[:, None] * w[None, :] * epsSW) +
+            (s[:, None] * e[None, :] * epsSE) +
+            (n[:, None] * e[None, :] * epsNE)
+        ) / ((n + s)[:, None] * (e + w)[None, :])).ravel(order="C")
+        # epsz = diags(d, 0, format="csr")     # note: epsz is not needed
+        epsz_inv = diags(1.0/d, 0, format="csr")
 
     Uxx = (Cx @ Bx + epsy @ Ay @ epsz_inv @ Dy + 
            (k0**2) * epsy + (1.0/k0**2) * Cx @ (Bx @ Ay - By @ Ax) @ epsz_inv @ Dy)

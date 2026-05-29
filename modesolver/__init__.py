@@ -17,7 +17,23 @@ __author__ = "Thomas E. Murphy"
 from .wgmodes import wgmodes
 from .wgmodes_yee import wgmodes_yee
 from .svmodes import svmodes
-from .geometry import waveguidemesh, waveguidemeshfull, fibermesh, stretchmesh, padmesh, trimmesh
+from .geometry import (
+    waveguidemesh, waveguidemeshfull, fibermesh, stretchmesh, padmesh, trimmesh,
+    Layer, LayerStack, Region, ClippedShape, GeometryModel,
+    rectangle, polygon, disk, from_shapely,
+    gds_import, gds_export,
+    layoutmesh,
+)
 from .postprocess import collocate, poynting, unfold, gsm_step, group_index, field_to_bitmap, field_to_contours
 
-__all__ = ["wgmodes", "wgmodes_yee", "svmodes", "waveguidemesh", "waveguidemeshfull", "fibermesh", "stretchmesh", "padmesh", "trimmesh", "collocate", "poynting", "unfold", "gsm_step", "group_index", "field_to_bitmap", "field_to_contours"]
+__all__ = [
+    "wgmodes", "wgmodes_yee", "svmodes",
+    "waveguidemesh", "waveguidemeshfull", "fibermesh",
+    "stretchmesh", "padmesh", "trimmesh",
+    "Layer", "LayerStack", "Region", "ClippedShape", "GeometryModel",
+    "rectangle", "polygon", "disk", "from_shapely",
+    "gds_import", "gds_export",
+    "layoutmesh",
+    "collocate", "poynting", "unfold", "gsm_step",
+    "group_index", "field_to_bitmap", "field_to_contours",
+]
